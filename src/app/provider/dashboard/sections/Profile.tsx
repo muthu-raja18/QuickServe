@@ -19,6 +19,12 @@ import {
   Star,
   Shield,
   Link,
+  Eye,
+  Camera,
+  FileText,
+  ExternalLink,
+  XCircle,
+  Download,
 } from "lucide-react";
 
 import { db } from "../../../firebase/config";
@@ -250,8 +256,8 @@ const TEXTS = {
     selectDistrict: "Select District",
     blockArea: "Block/Area",
     blockPlaceholder: "e.g., Anna Nagar, T Nagar",
-    profilePhoto: "Profile Photo Link",
-    proofDocument: "Proof Document Link",
+    profilePhoto: "Profile Photo",
+    proofDocument: "Proof Document",
     notSet: "Not set",
     notSpecified: "Not specified",
     notProvided: "Not provided",
@@ -267,6 +273,20 @@ const TEXTS = {
     threeToFive: "3-5 years",
     fiveToTen: "5-10 years",
     tenPlus: "10+ years",
+    viewPhoto: "View Photo",
+    viewDocument: "View Document",
+    zoom : "Zoom",
+    close: "Close",
+    download: "Download",
+    openNewTab: "Open in new tab",
+    zoomIn: "Zoom In",
+    zoomOut: "Zoom Out",
+    rotate: "Rotate",
+    fullscreen: "Fullscreen",
+    documentPreview: "Document Preview",
+    photoPreview: "Photo Preview",
+    provider: "Provider",
+    backToProfile: "Back to Profile",
   },
   ta: {
     profileSettings: "சுயவிவர அமைப்புகள்",
@@ -294,8 +314,8 @@ const TEXTS = {
     selectDistrict: "மாவட்டத்தைத் தேர்ந்தெடுக்கவும்",
     blockArea: "பகுதி",
     blockPlaceholder: "எ.கா., அண்ணா நகர், டி. நகர்",
-    profilePhoto: "சுயபட இணைப்பு",
-    proofDocument: "ஆவண சான்று இணைப்பு",
+    profilePhoto: "சுயபடம்",
+    proofDocument: "ஆவண சான்று",
     notSet: "அமைக்கப்படவில்லை",
     notSpecified: "குறிப்பிடப்படவில்லை",
     notProvided: "வழங்கப்படவில்லை",
@@ -311,7 +331,237 @@ const TEXTS = {
     threeToFive: "3-5 ஆண்டுகள்",
     fiveToTen: "5-10 ஆண்டுகள்",
     tenPlus: "10+ ஆண்டுகள்",
+    viewPhoto: "புகைப்படத்தைக் காண்க",
+    viewDocument: "ஆவணத்தைக் காண்க",
+    zoom : "பெரிதாக்கு",
+    close: "மூடு",
+    download: "பதிவிறக்கம்",
+    openNewTab: "புதிய தாவலில் திறக்கவும்",
+    zoomIn: "பெரிதாக்கு",
+    zoomOut: "சிறிதாக்கு",
+    rotate: "சுழற்று",
+    fullscreen: "முழுத்திரை",
+    documentPreview: "ஆவண முன்னோட்டம்",
+    photoPreview: "புகைப்பட முன்னோட்டம்",
+    provider: "வழங்குநர்",
+    backToProfile: "சுயவிவரத்திற்குத் திரும்புக",
   },
+};
+
+// View Modal Component
+const ViewModal = ({
+  isOpen,
+  type,
+  url,
+  title,
+  providerName,
+  onClose,
+  lang = "en",
+}: {
+  isOpen: boolean;
+  type: "photo" | "document";
+  url: string;
+  title: string;
+  providerName: string;
+  onClose: () => void;
+  lang?: string;
+}) => {
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const t = TEXTS[lang as keyof typeof TEXTS] || TEXTS.en;
+
+  const isPDF = url.toLowerCase().endsWith(".pdf");
+
+  const zoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
+  const zoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
+  const rotate = () => setRotation((prev) => (prev + 90) % 360);
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Handle fullscreen change
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title={t.close}
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h3 className="font-bold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-600">
+                {t.provider}: {providerName}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {type === "photo" && (
+              <>
+                <button
+                  onClick={zoomOut}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={t.zoomOut}
+                >
+                  <XCircle className="w-5 h-5 text-gray-600" />
+                </button>
+                <button
+                  onClick={zoomIn}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={t.zoomIn}
+                >
+                  <Eye className="w-5 h-5 text-gray-600" />
+                </button>
+                <button
+                  onClick={rotate}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={t.rotate}
+                >
+                  <svg
+                    className="w-5 h-5 text-gray-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+              </>
+            )}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title={t.fullscreen}
+            >
+              <ExternalLink className="w-5 h-5 text-gray-600" />
+            </button>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+              title={t.openNewTab}
+            >
+              <ExternalLink className="w-5 h-5" />
+            </a>
+            <a
+              href={url}
+              download
+              className="p-2 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
+              title={t.download}
+            >
+              <Download className="w-5 h-5" />
+            </a>
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="flex-1 overflow-auto p-4">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
+            {type === "photo" ? (
+              <div className="relative max-w-full max-h-full">
+                <img
+                  src={url}
+                  alt={title}
+                  className="rounded-lg shadow-lg"
+                  style={{
+                    transform: `scale(${scale}) rotate(${rotation}deg)`,
+                    transition: "transform 0.2s ease",
+                    maxWidth: "100%",
+                    maxHeight: "calc(90vh - 120px)",
+                    objectFit: "contain",
+                  }}
+                />
+                {scale !== 1 && (
+                  <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm">
+                    {Math.round(scale * 100)}%
+                  </div>
+                )}
+              </div>
+            ) : isPDF ? (
+              <div className="w-full h-full">
+                <iframe
+                  src={`${url}#toolbar=0&navpanes=0&scrollbar=0`}
+                  className="w-full h-full rounded-lg border"
+                  title={title}
+                  style={{ minHeight: "500px" }}
+                />
+              </div>
+            ) : (
+              <img
+                src={url}
+                alt={title}
+                className="max-w-full max-h-[70vh] rounded-lg shadow-lg"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              {type === "photo" && (
+                <div className="flex items-center gap-4">
+                  <span>
+                    {t.zoom}: {Math.round(scale * 100)}%
+                  </span>
+                  <span>
+                    {t.rotate}: {rotation}°
+                  </span>
+                </div>
+              )}
+              {type === "document" && isPDF && (
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>PDF Document</span>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-lg transition-colors font-medium"
+            >
+              {t.backToProfile}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default function ProfileSection() {
@@ -354,6 +604,39 @@ export default function ProfileSection() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // View modal state
+  const [viewModal, setViewModal] = useState<{
+    isOpen: boolean;
+    type: "photo" | "document";
+    url: string;
+    title: string;
+  }>({
+    isOpen: false,
+    type: "photo",
+    url: "",
+    title: "",
+  });
+
+  // Open view modal
+  const openViewModal = (type: "photo" | "document", url: string) => {
+    setViewModal({
+      isOpen: true,
+      type,
+      url,
+      title: type === "photo" ? t.photoPreview : t.documentPreview,
+    });
+  };
+
+  // Close view modal
+  const closeViewModal = () => {
+    setViewModal({
+      isOpen: false,
+      type: "photo",
+      url: "",
+      title: "",
+    });
+  };
 
   // Load profile data and calculate rating
   useEffect(() => {
@@ -615,10 +898,37 @@ export default function ProfileSection() {
 
       {/* Profile Card */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        {/* Profile Header */}
+        {/* Profile Header with Photo */}
         <div className="flex items-start gap-4 mb-6">
-          <div className="w-20 h-20 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <User className="w-10 h-10 text-white" />
+          {/* Profile Photo Section */}
+          <div className="relative group">
+            {profile.photoLink ? (
+              <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
+                <img
+                  src={profile.photoLink}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <button
+                    onClick={() => openViewModal("photo", profile.photoLink)}
+                    className="p-2 bg-white/90 rounded-full hover:bg-white transition"
+                    title={t.viewPhoto}
+                  >
+                    <Eye className="w-5 h-5 text-gray-800" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-24 h-24 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center">
+                <User className="w-12 h-12 text-white" />
+              </div>
+            )}
+            {profile.photoLink && (
+              <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-1 shadow-lg">
+                <Camera className="w-4 h-4" />
+              </div>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -933,66 +1243,92 @@ export default function ProfileSection() {
               )}
             </div>
 
-            {/* Document Links (Read-only) */}
+            {/* Document Links with View Options */}
             <div className="pt-4 border-t border-gray-200">
               <h5 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
-                <Link className="w-5 h-5 text-gray-500" />
+                <FileText className="w-5 h-5 text-gray-500" />
                 {t.verificationDocs}
               </h5>
 
               <div className="space-y-3">
-                {/* Photo Link */}
+                {/* Photo Link with View Option */}
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">{t.profilePhoto}</p>
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    {profile.photoLink ? (
-                      <a
-                        href={profile.photoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                  <p className="text-sm text-gray-600 mb-2">{t.profilePhoto}</p>
+                  {profile.photoLink ? (
+                    <div className="flex gap-2">
+                      <div className="flex-1 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <a
+                          href={profile.photoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                        >
+                          <Link className="w-4 h-4 group-hover:scale-110 transition" />
+                          <span className="truncate">
+                            {profile.photoLink.length > 40
+                              ? profile.photoLink.substring(0, 40) + "..."
+                              : profile.photoLink}
+                          </span>
+                        </a>
+                      </div>
+                      <button
+                        onClick={() =>
+                          openViewModal("photo", profile.photoLink)
+                        }
+                        className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition flex items-center gap-2"
+                        title={t.viewPhoto}
                       >
-                        <Link className="w-4 h-4 group-hover:scale-110 transition" />
-                        <span className="truncate">
-                          {profile.photoLink.length > 40
-                            ? profile.photoLink.substring(0, 40) + "..."
-                            : profile.photoLink}
-                        </span>
-                      </a>
-                    ) : (
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
                       <span className="text-gray-400 italic text-sm">
                         {t.notProvided}
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Proof Link */}
+                {/* Proof Link with View Option */}
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">
+                  <p className="text-sm text-gray-600 mb-2">
                     {t.proofDocument}
                   </p>
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    {profile.proofLink ? (
-                      <a
-                        href={profile.proofLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                  {profile.proofLink ? (
+                    <div className="flex gap-2">
+                      <div className="flex-1 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <a
+                          href={profile.proofLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                        >
+                          <Link className="w-4 h-4 group-hover:scale-110 transition" />
+                          <span className="truncate">
+                            {profile.proofLink.length > 40
+                              ? profile.proofLink.substring(0, 40) + "..."
+                              : profile.proofLink}
+                          </span>
+                        </a>
+                      </div>
+                      <button
+                        onClick={() =>
+                          openViewModal("document", profile.proofLink)
+                        }
+                        className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition flex items-center gap-2"
+                        title={t.viewDocument}
                       >
-                        <Link className="w-4 h-4 group-hover:scale-110 transition" />
-                        <span className="truncate">
-                          {profile.proofLink.length > 40
-                            ? profile.proofLink.substring(0, 40) + "..."
-                            : profile.proofLink}
-                        </span>
-                      </a>
-                    ) : (
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
                       <span className="text-gray-400 italic text-sm">
                         {t.notProvided}
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1053,6 +1389,17 @@ export default function ProfileSection() {
           </motion.div>
         )}
       </div>
+
+      {/* View Modal */}
+      <ViewModal
+        isOpen={viewModal.isOpen}
+        type={viewModal.type}
+        url={viewModal.url}
+        title={viewModal.title}
+        providerName={profile.name}
+        onClose={closeViewModal}
+        lang={lang}
+      />
     </div>
   );
 }

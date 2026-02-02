@@ -24,6 +24,7 @@ import {
   Award,
   Clock,
   RefreshCw,
+  Camera,
 } from "lucide-react";
 
 interface CompletedRequest {
@@ -37,7 +38,8 @@ interface CompletedRequest {
   seekerRating?: number;
   seekerReview?: string;
   providerPhone?: string;
-  providerId?: string; // ADDED THIS
+  providerId?: string;
+  providerPhotoLink?: string;
 }
 
 export default function HistorySection() {
@@ -48,9 +50,48 @@ export default function HistorySection() {
     CompletedRequest[]
   >([]);
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0); // ADDED THIS
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  /* -------------------- ✅ ADDED: Listen for rating updates -------------------- */
+  // ✅ FIXED: Safely get provider photo link
+  const getProviderPhotoLink = async (providerId: string): Promise<string> => {
+    if (!providerId) return "";
+
+    try {
+      const providerDoc = await getDoc(doc(db, "providers", providerId));
+      if (providerDoc.exists()) {
+        const providerData = providerDoc.data();
+
+        // Check for photoLink in different possible locations
+        if (providerData.photoLink) {
+          return providerData.photoLink;
+        }
+
+        // Check for nested structure
+        if (providerData.profile && providerData.profile.photoLink) {
+          return providerData.profile.photoLink;
+        }
+
+        // Check for cloudinaryURL or imageURL
+        if (providerData.cloudinaryURL) {
+          return providerData.cloudinaryURL;
+        }
+
+        if (providerData.imageURL) {
+          return providerData.imageURL;
+        }
+
+        if (providerData.profilePhoto) {
+          return providerData.profilePhoto;
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching provider photo for ${providerId}:`, error);
+    }
+
+    return "";
+  };
+
+  // Listen for rating updates
   useEffect(() => {
     const handleRatingUpdated = () => {
       console.log("🔄 Rating update received in History - refreshing");
@@ -64,50 +105,13 @@ export default function HistorySection() {
     };
   }, []);
 
-  /* -------------------- ✅ ADDED: Get provider's current rating -------------------- */
-  const getProviderCurrentRating = async (providerId: string) => {
-    try {
-      const providerRef = doc(db, "providers", providerId);
-      const providerDoc = await getDoc(providerRef);
-
-      if (providerDoc.exists()) {
-        const providerData = providerDoc.data();
-
-        // Extract rating consistently with other pages
-        if (providerData.rating && typeof providerData.rating === "object") {
-          return {
-            rating: providerData.rating.average || 0,
-            totalReviews: providerData.rating.totalReviews || 0,
-          };
-        } else if (providerData.averageRating !== undefined) {
-          return {
-            rating: providerData.averageRating || 0,
-            totalReviews:
-              providerData.totalReviews || providerData.completedJobs || 0,
-          };
-        } else {
-          return {
-            rating: providerData.rating || 0,
-            totalReviews:
-              providerData.totalReviews || providerData.completedJobs || 0,
-          };
-        }
-      }
-    } catch (error) {
-      console.error("Error getting provider rating:", error);
-    }
-
-    return { rating: 0, totalReviews: 0 };
-  };
-
-  // Load completed requests
+  // Load completed requests with provider photos
   useEffect(() => {
     if (!user?.uid) return;
 
     setLoading(true);
     const requestsRef = collection(db, "serviceRequests");
 
-    // ✅ IMPROVED: Use query with where clause for better performance
     const q = query(
       requestsRef,
       where("seekerId", "==", user.uid),
@@ -117,7 +121,6 @@ export default function HistorySection() {
     const unsubscribe = onSnapshot(
       q,
       async (snapshot) => {
-        // ✅ Added async
         try {
           const userCompletedRequests: CompletedRequest[] = [];
 
@@ -138,8 +141,16 @@ export default function HistorySection() {
               seekerRating: data.seekerRating || 0,
               seekerReview: data.seekerReview || "",
               providerPhone: data.providerPhone,
-              providerId: data.providerId, // ✅ Added this
+              providerId: data.providerId,
+              providerPhotoLink: "", // Initialize
             };
+
+            // ✅ FIXED: Fetch provider photo if providerId exists
+            if (request.providerId) {
+              request.providerPhotoLink = await getProviderPhotoLink(
+                request.providerId
+              );
+            }
 
             userCompletedRequests.push(request);
           }
@@ -154,25 +165,9 @@ export default function HistorySection() {
           setCompletedRequests(sortedRequests);
           setLoading(false);
 
-          // ✅ Log for debugging
           console.log(
-            `✅ History: Loaded ${sortedRequests.length} completed requests`
+            `✅ History: Loaded ${sortedRequests.length} completed requests with photos`
           );
-
-          // ✅ Check provider ratings for the latest rated service
-          if (sortedRequests.length > 0) {
-            const latestRated = sortedRequests.find(
-              (r) => r.seekerRating && r.seekerRating > 0
-            );
-            if (latestRated && latestRated.providerId) {
-              const providerRating = await getProviderCurrentRating(
-                latestRated.providerId
-              );
-              console.log(
-                `📊 Provider's current rating: ${providerRating.rating} stars (${providerRating.totalReviews} reviews)`
-              );
-            }
-          }
         } catch (error) {
           console.error("Error processing history:", error);
           setLoading(false);
@@ -180,48 +175,14 @@ export default function HistorySection() {
       },
       (error) => {
         console.error("Error in history subscription:", error);
-        // Fallback to loading all requests
-        loadHistoryFallback();
+        setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [user?.uid, refreshKey]); // ✅ Added refreshKey dependency
+  }, [user?.uid, refreshKey]);
 
-  // Fallback loading method
-  const loadHistoryFallback = async () => {
-    if (!user?.uid) return;
-
-    try {
-      const requestsRef = collection(db, "serviceRequests");
-      const snapshot = await onSnapshot(requestsRef, (snapshot) => {
-        const allRequests = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as CompletedRequest[];
-
-        // Filter for this user's completed requests
-        const userCompletedRequests = allRequests.filter(
-          (req: any) => req.seekerId === user.uid && req.status === "completed"
-        );
-
-        // Sort by completion date (newest first)
-        const sortedRequests = userCompletedRequests.sort(
-          (a, b) =>
-            (b.seekerConfirmedAt?.toMillis() || 0) -
-            (a.seekerConfirmedAt?.toMillis() || 0)
-        );
-
-        setCompletedRequests(sortedRequests);
-        setLoading(false);
-      });
-    } catch (error) {
-      console.error("Fallback loading failed:", error);
-      setLoading(false);
-    }
-  };
-
-  /* -------------------- ✅ ADDED: Refresh function -------------------- */
+  // Refresh function
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
     setLoading(true);
@@ -442,11 +403,45 @@ export default function HistorySection() {
                   key={request.id}
                   className="border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all"
                 >
-                  {/* Header with Provider Info */}
+                  {/* Header with Provider Info and Photo */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-lg flex items-center justify-center">
-                        <User className="w-6 h-6 text-blue-600" />
+                      {/* Provider Photo - Fixed rendering */}
+                      <div className="relative w-14 h-14 flex-shrink-0">
+                        {request.providerPhotoLink ? (
+                          <>
+                            <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                              <img
+                                src={request.providerPhotoLink}
+                                alt={request.providerName}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = "none";
+                                  const parent = target.parentElement;
+                                  if (parent) {
+                                    const fallbackDiv =
+                                      document.createElement("div");
+                                    fallbackDiv.className =
+                                      "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
+                                    fallbackDiv.textContent =
+                                      request.providerName
+                                        .charAt(0)
+                                        .toUpperCase();
+                                    parent.appendChild(fallbackDiv);
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                              <Camera className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {request.providerName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <h4 className="font-semibold text-gray-900">
@@ -538,7 +533,7 @@ export default function HistorySection() {
       <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-5">
         <div className="flex items-start gap-4">
           <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg">
-            <Info className="w-5 h-5 text-white" />
+            <InfoIcon className="w-5 h-5 text-white" />
           </div>
           <div>
             <p className="font-medium text-gray-900 mb-2">
@@ -556,8 +551,8 @@ export default function HistorySection() {
   );
 }
 
-// Add Info icon component
-const Info = ({ className }: { className?: string }) => (
+// Info icon component
+const InfoIcon = ({ className }: { className?: string }) => (
   <svg
     className={className}
     fill="none"

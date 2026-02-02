@@ -14,7 +14,6 @@ import {
   serverTimestamp,
   getDocs,
   query,
-  orderBy,
   where,
 } from "firebase/firestore";
 import {
@@ -33,6 +32,7 @@ import {
   X,
   MessageSquare,
   AlertCircle,
+  Camera,
 } from "lucide-react";
 
 // Types
@@ -61,6 +61,7 @@ interface ServiceRequest {
   seekerReview?: string;
   seekerId: string;
   providerId?: string;
+  providerPhotoLink?: string; // Added for photo
 }
 
 // Bilingual keywords for reviews
@@ -143,7 +144,46 @@ export default function MyRequestsSection() {
     loadProfileData();
   }, [user]);
 
-  // Load requests with providerId
+  // ✅ FIXED: Safely get provider photo link
+  const getProviderPhotoLink = async (providerId: string): Promise<string> => {
+    if (!providerId) return "";
+
+    try {
+      const providerDoc = await getDoc(doc(db, "providers", providerId));
+      if (providerDoc.exists()) {
+        const providerData = providerDoc.data();
+
+        // Check for photoLink in different possible locations
+        if (providerData.photoLink) {
+          return providerData.photoLink;
+        }
+
+        // Check for nested structure
+        if (providerData.profile && providerData.profile.photoLink) {
+          return providerData.profile.photoLink;
+        }
+
+        // Check for cloudinaryURL or imageURL
+        if (providerData.cloudinaryURL) {
+          return providerData.cloudinaryURL;
+        }
+
+        if (providerData.imageURL) {
+          return providerData.imageURL;
+        }
+
+        if (providerData.profilePhoto) {
+          return providerData.profilePhoto;
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching provider photo for ${providerId}:`, error);
+    }
+
+    return "";
+  };
+
+  // ✅ FIXED: Load requests with provider photo
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
@@ -157,67 +197,49 @@ export default function MyRequestsSection() {
 
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
-        const userRequests = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as ServiceRequest[];
+      async (snapshot) => {
+        try {
+          const userRequests = await Promise.all(
+            snapshot.docs.map(async (doc) => {
+              const data = doc.data();
+              const requestData = {
+                id: doc.id,
+                ...data,
+              } as ServiceRequest;
 
-        // Sort by createdAt desc
-        userRequests.sort(
-          (a, b) =>
-            (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-        );
+              // ✅ FIXED: Fetch provider photo safely
+              if (requestData.providerId) {
+                requestData.providerPhotoLink = await getProviderPhotoLink(
+                  requestData.providerId
+                );
+              }
 
-        setRequests(userRequests);
-        setLoading(false);
+              return requestData;
+            })
+          );
+
+          // Sort by createdAt desc
+          userRequests.sort(
+            (a, b) =>
+              (b.createdAt?.toMillis?.() || 0) -
+              (a.createdAt?.toMillis?.() || 0)
+          );
+
+          setRequests(userRequests);
+          setLoading(false);
+        } catch (error) {
+          console.error("Error processing requests:", error);
+          setLoading(false);
+        }
       },
       (error) => {
         console.error("Error loading requests:", error);
-        loadRequestsFallback();
+        setLoading(false);
       }
     );
 
     return () => unsubscribe();
   }, [user?.uid]);
-
-  // Fallback loading method
-  const loadRequestsFallback = async () => {
-    if (!user?.uid) return;
-
-    try {
-      const requestsRef = collection(db, "serviceRequests");
-      const snapshot = await getDocs(requestsRef);
-
-      const allRequests = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ServiceRequest[];
-
-      // Filter by seekerId on client side
-      const userRequests = allRequests.filter(
-        (req) => req.seekerId === user.uid
-      );
-
-      // Sort by createdAt desc
-      userRequests.sort(
-        (a, b) =>
-          (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-      );
-
-      setRequests(userRequests);
-    } catch (error) {
-      console.error("Fallback loading failed:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter requests by status
-  const pendingRequests = requests.filter((req) => req.status === "pending");
-  const activeRequests = requests.filter((req) =>
-    ["accepted", "in_progress", "awaiting_confirmation"].includes(req.status)
-  );
 
   // Format date
   const formatDate = (timestamp?: Timestamp) => {
@@ -334,7 +356,7 @@ export default function MyRequestsSection() {
     }
   };
 
-  // Submit rating with comment - UPDATED VERSION WITHOUT RELOAD
+  // Submit rating with comment
   const handleSubmitRating = async () => {
     if (!ratingModalRequest || rating === 0) return;
 
@@ -426,7 +448,7 @@ export default function MyRequestsSection() {
                 ...req,
                 status: "completed" as const,
                 seekerRating: rating,
-                  seekerReview: reviewComment.trim() || undefined,
+                seekerReview: reviewComment.trim() || undefined,
               }
             : req
         )
@@ -480,6 +502,12 @@ export default function MyRequestsSection() {
     setEditAddressMode(false);
     setCustomAddress(userAddress);
   };
+
+  // Filter requests by status
+  const pendingRequests = requests.filter((req) => req.status === "pending");
+  const activeRequests = requests.filter((req) =>
+    ["accepted", "in_progress", "awaiting_confirmation"].includes(req.status)
+  );
 
   // Loading state
   if (loading) {
@@ -566,24 +594,66 @@ export default function MyRequestsSection() {
                   key={request.id}
                   className="bg-white rounded-lg border border-gray-200 p-4"
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
-                        {request.providerName}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {request.serviceType}
-                      </p>
+                  {/* Provider Header with Photo */}
+                  <div className="flex items-start gap-3 mb-3">
+                    {/* Provider Photo - Fixed rendering */}
+                    <div className="relative w-12 h-12 flex-shrink-0">
+                      {request.providerPhotoLink ? (
+                        <>
+                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                            <img
+                              src={request.providerPhotoLink}
+                              alt={request.providerName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  const fallbackDiv =
+                                    document.createElement("div");
+                                  fallbackDiv.className =
+                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
+                                  fallbackDiv.textContent = request.providerName
+                                    .charAt(0)
+                                    .toUpperCase();
+                                  parent.appendChild(fallbackDiv);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                            <Camera className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                          {request.providerName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        time.expired
-                          ? "bg-red-100 text-red-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {time.text}
-                    </span>
+
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            {request.providerName}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            {request.serviceType}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            time.expired
+                              ? "bg-red-100 text-red-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {time.text}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-2 text-sm text-gray-600">
@@ -650,28 +720,70 @@ export default function MyRequestsSection() {
                   key={request.id}
                   className="bg-white rounded-lg border border-gray-200 p-4"
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
-                        {request.providerName}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {request.serviceType}
-                      </p>
+                  {/* Provider Header with Photo */}
+                  <div className="flex items-start gap-3 mb-3">
+                    {/* Provider Photo - Fixed rendering */}
+                    <div className="relative w-12 h-12 flex-shrink-0">
+                      {request.providerPhotoLink ? (
+                        <>
+                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                            <img
+                              src={request.providerPhotoLink}
+                              alt={request.providerName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  const fallbackDiv =
+                                    document.createElement("div");
+                                  fallbackDiv.className =
+                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
+                                  fallbackDiv.textContent = request.providerName
+                                    .charAt(0)
+                                    .toUpperCase();
+                                  parent.appendChild(fallbackDiv);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                            <Camera className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                          {request.providerName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                      {request.status === "accepted"
-                        ? lang === "en"
-                          ? "Accepted"
-                          : "ஏற்றுக்கொள்ளப்பட்டது"
-                        : request.status === "in_progress"
-                        ? lang === "en"
-                          ? "In Progress"
-                          : "நடைபெறுகிறது"
-                        : lang === "en"
-                        ? "Awaiting Confirmation"
-                        : "உறுதிப்படுத்தல் காத்திருக்கிறது"}
-                    </span>
+
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            {request.providerName}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            {request.serviceType}
+                          </p>
+                        </div>
+                        <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                          {request.status === "accepted"
+                            ? lang === "en"
+                              ? "Accepted"
+                              : "ஏற்றுக்கொள்ளப்பட்டது"
+                            : request.status === "in_progress"
+                            ? lang === "en"
+                              ? "In Progress"
+                              : "நடைபெறுகிறது"
+                            : lang === "en"
+                            ? "Awaiting Confirmation"
+                            : "உறுதிப்படுத்தல் காத்திருக்கிறது"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-2 text-sm text-gray-600 mb-4">
@@ -782,7 +894,7 @@ export default function MyRequestsSection() {
         </div>
       )}
 
-      {/* Address Sharing Modal */}
+      {/* Address Sharing Modal with Provider Photo */}
       {addressModalRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -800,16 +912,57 @@ export default function MyRequestsSection() {
               </div>
 
               <div className="mb-6 space-y-4">
+                {/* Provider Info with Photo */}
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700 mb-1">
-                    {lang === "en" ? "Provider" : "வழங்குநர்"}
-                  </p>
-                  <p className="font-semibold text-gray-900">
-                    {addressModalRequest.providerName}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {addressModalRequest.serviceType}
-                  </p>
+                  <div className="flex items-center gap-3 mb-2">
+                    {/* Provider Photo in modal */}
+                    <div className="relative w-12 h-12 flex-shrink-0">
+                      {addressModalRequest.providerPhotoLink ? (
+                        <>
+                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                            <img
+                              src={addressModalRequest.providerPhotoLink}
+                              alt={addressModalRequest.providerName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  const fallbackDiv =
+                                    document.createElement("div");
+                                  fallbackDiv.className =
+                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
+                                  fallbackDiv.textContent =
+                                    addressModalRequest.providerName
+                                      .charAt(0)
+                                      .toUpperCase();
+                                  parent.appendChild(fallbackDiv);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                            <Camera className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                          {addressModalRequest.providerName
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {addressModalRequest.providerName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {addressModalRequest.serviceType}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Phone Display */}
@@ -927,7 +1080,7 @@ export default function MyRequestsSection() {
         </div>
       )}
 
-      {/* Rating Modal */}
+      {/* Rating Modal with Provider Photo */}
       {ratingModalRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -949,13 +1102,57 @@ export default function MyRequestsSection() {
               </div>
 
               <div className="mb-6">
+                {/* Provider Info with Photo */}
                 <div className="bg-green-50 p-3 rounded-lg mb-4">
-                  <p className="font-semibold text-gray-900">
-                    {ratingModalRequest.providerName}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {ratingModalRequest.serviceType}
-                  </p>
+                  <div className="flex items-center gap-3 mb-2">
+                    {/* Provider Photo in modal */}
+                    <div className="relative w-12 h-12 flex-shrink-0">
+                      {ratingModalRequest.providerPhotoLink ? (
+                        <>
+                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                            <img
+                              src={ratingModalRequest.providerPhotoLink}
+                              alt={ratingModalRequest.providerName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  const fallbackDiv =
+                                    document.createElement("div");
+                                  fallbackDiv.className =
+                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
+                                  fallbackDiv.textContent =
+                                    ratingModalRequest.providerName
+                                      .charAt(0)
+                                      .toUpperCase();
+                                  parent.appendChild(fallbackDiv);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                            <Camera className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                          {ratingModalRequest.providerName
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {ratingModalRequest.providerName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {ratingModalRequest.serviceType}
+                      </p>
+                    </div>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
                     {lang === "en"
                       ? "Service completed. Please rate your experience."

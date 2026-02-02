@@ -14,7 +14,10 @@ import {
   Menu,
   X,
   CheckCircle2,
+  Camera,
 } from "lucide-react";
+import { db } from "../../../firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 
 interface SidebarProps {
   active: string;
@@ -31,6 +34,35 @@ export default function Sidebar({
 }: SidebarProps) {
   const { lang } = useLanguage();
   const { user, signOut } = useAuth();
+  const [profilePhoto, setProfilePhoto] = useState<string>("");
+  const [loadingPhoto, setLoadingPhoto] = useState(true);
+
+  // Fetch provider profile photo
+  useEffect(() => {
+    const fetchProfilePhoto = async () => {
+      if (!user?.uid) {
+        setLoadingPhoto(false);
+        return;
+      }
+
+      try {
+        setLoadingPhoto(true);
+        const providerDoc = await getDoc(doc(db, "providers", user.uid));
+        if (providerDoc.exists()) {
+          const data = providerDoc.data();
+          if (data.photoLink) {
+            setProfilePhoto(data.photoLink);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching profile photo:", error);
+      } finally {
+        setLoadingPhoto(false);
+      }
+    };
+
+    fetchProfilePhoto();
+  }, [user?.uid]);
 
   // Handle logout
   const handleLogout = async () => {
@@ -104,19 +136,57 @@ export default function Sidebar({
               </div>
             </div>
 
-            {/* User Info with Verification Badge */}
+            {/* User Info with Profile Photo */}
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {getUserInitial()}
-                </div>
+                {/* Profile Photo Container */}
+                {loadingPhoto ? (
+                  <div className="w-12 h-12 bg-gray-200 rounded-full animate-pulse flex items-center justify-center">
+                    <User className="w-5 h-5 text-gray-400" />
+                  </div>
+                ) : profilePhoto ? (
+                  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-md">
+                    <img
+                      src={profilePhoto}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to initial if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent) {
+                          const fallbackDiv = document.createElement("div");
+                          fallbackDiv.className =
+                            "w-full h-full bg-gradient-to-r from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold text-lg";
+                          fallbackDiv.textContent = getUserInitial();
+                          parent.appendChild(fallbackDiv);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                    {getUserInitial()}
+                  </div>
+                )}
+
+                {/* Verification Badge */}
                 {user?.isApproved && (
                   <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
                     <CheckCircle2 className="w-3 h-3 text-white" />
                   </div>
                 )}
+
+                {/* Camera Icon if photo exists */}
+                {profilePhoto && (
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
+                    <Camera className="w-2.5 h-2.5 text-white" />
+                  </div>
+                )}
               </div>
-              <div className="min-w-0">
+
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-gray-900 text-sm truncate">
                   {user?.displayName ||
                     user?.email?.split("@")[0] ||
@@ -125,6 +195,14 @@ export default function Sidebar({
                 <p className="text-xs text-gray-500 truncate">
                   {lang === "en" ? "Service Provider" : "சேவை வழங்குநர்"}
                 </p>
+                {profilePhoto && (
+                  <p className="text-xs text-teal-600 mt-1 flex items-center gap-1">
+                    <Camera className="w-3 h-3" />
+                    {lang === "en"
+                      ? "Photo Verified"
+                      : "புகைப்படம் சரிபார்க்கப்பட்டது"}
+                  </p>
+                )}
               </div>
             </div>
           </div>
