@@ -134,6 +134,7 @@ export default function ProviderDashboardLayout({
   });
   const [loadingStats, setLoadingStats] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [initialCheckDone, setInitialCheckDone] = useState(false); // ADDED
 
   // Set mounted state
   useEffect(() => {
@@ -152,17 +153,40 @@ export default function ProviderDashboardLayout({
     [lang]
   );
 
-  // Redirect if not authenticated or not approved provider
+  // 🔥 FIXED: Redirect if not authenticated or not approved provider
   useEffect(() => {
-    if (!authLoading && user) {
-      if (!user.providerData) {
-        router.push("/");
-      } else if (!user.isApproved) {
-        router.push("/provider/waiting");
-      }
-    } else if (!authLoading && !user) {
+    if (authLoading) return;
+
+    // Mark that initial check is done
+    setInitialCheckDone(true);
+
+    console.log("Provider Auth Check:", {
+      loading: authLoading,
+      hasUser: !!user,
+      userRole: user?.role,
+      isApproved: user?.isApproved,
+      hasProviderData: !!user?.providerData,
+    });
+
+    if (!user) {
+      console.log("No user found, redirecting to provider login");
       router.push("/provider/login");
+      return;
     }
+
+    if (user.role !== "provider") {
+      console.log("User is not a provider, redirecting to home");
+      router.push("/");
+      return;
+    }
+
+    if (!user.isApproved) {
+      console.log("Provider not approved, redirecting to waiting page");
+      router.push("/provider/waiting");
+      return;
+    }
+
+    console.log("Provider authenticated and approved, staying on dashboard");
   }, [user, authLoading, router]);
 
   // Calculate if request is urgent (expiring in <30 minutes) - Memoized
@@ -452,13 +476,14 @@ export default function ProviderDashboardLayout({
   ]);
 
   // Show loading while checking auth
-  if (authLoading || !mounted) {
+  if (authLoading || !mounted || !initialCheckDone) {
+    // UPDATED
     return <DashboardLoading lang={lang} />;
   }
 
   // Don't render if no user or not provider
   if (!user || user.role !== "provider" || !user.isApproved) {
-    return null;
+    return <DashboardLoading lang={lang} />; // Return loading instead of null
   }
 
   return (

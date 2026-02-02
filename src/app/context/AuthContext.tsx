@@ -97,60 +97,122 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /* ---------- Fetch Firestore user data ---------- */
   const fetchUserData = async (firebaseUser: User): Promise<AuthUser> => {
-    const role = await getActualRole(firebaseUser.email || "");
+    try {
+      // Get stored role from localStorage as fallback
+      const storedRole = localStorage.getItem("userRole") as
+        | "provider"
+        | "seeker"
+        | null;
 
-    // Check if user has data in both collections
-    const seekerSnap = await getDoc(doc(db, "users", firebaseUser.uid));
-    const providerSnap = await getDoc(doc(db, "providers", firebaseUser.uid));
+      // Fetch both collections in parallel (FASTER)
+      const [seekerSnap, providerSnap] = await Promise.all([
+        getDoc(doc(db, "users", firebaseUser.uid)),
+        getDoc(doc(db, "providers", firebaseUser.uid)),
+      ]);
 
-    const hasSeekerData = seekerSnap.exists();
-    const hasProviderData = providerSnap.exists();
+      const hasSeekerData = seekerSnap.exists();
+      const hasProviderData = providerSnap.exists();
 
-    // If user has data in both collections, allow access to both roles
-    if (hasSeekerData && hasProviderData) {
-      const seekerData = seekerSnap.data() as SeekerData;
-      const providerData = providerSnap.data() as ProviderData;
+      console.log("Auth Debug:", {
+        uid: firebaseUser.uid,
+        hasSeekerData,
+        hasProviderData,
+        storedRole,
+      });
+
+      // DECISION LOGIC: Prioritize Firestore data over stored role
+      let role: "provider" | "seeker" | null = null;
+
+      // Case 1: User has BOTH seeker and provider data (dual account)
+      if (hasSeekerData && hasProviderData) {
+        console.log("User has both seeker and provider data");
+
+        // Try to get role from Firestore function
+        const firebaseRole = await getActualRole(firebaseUser.email || "");
+        console.log("Firebase role result:", firebaseRole);
+
+        // If Firebase returns a valid role, use it
+        if (firebaseRole === "provider" || firebaseRole === "seeker") {
+          role = firebaseRole;
+        }
+        // If Firebase returns "none", check if provider is approved
+        else if (firebaseRole === "none") {
+          const providerData = providerSnap.data() as ProviderData;
+          // If provider is approved, default to provider, else seeker
+          role = providerData.status === "approved" ? "provider" : "seeker";
+        }
+
+        // Store the determined role
+        if (role) {
+          localStorage.setItem("userRole", role);
+        }
+      }
+      // Case 2: User has ONLY provider data
+      else if (hasProviderData && !hasSeekerData) {
+        role = "provider";
+        localStorage.setItem("userRole", "provider");
+      }
+      // Case 3: User has ONLY seeker data
+      else if (hasSeekerData && !hasProviderData) {
+        role = "seeker";
+        localStorage.setItem("userRole", "seeker");
+      }
+      // Case 4: User has NO data in Firestore (shouldn't happen, but fallback)
+      else {
+        console.log("No Firestore data found, using stored role:", storedRole);
+        role = storedRole; // Use stored role as last resort
+      }
+
+      console.log("Final determined role:", role);
+
+      // Build user object based on determined role
+      if (role === "provider" && hasProviderData) {
+        const providerData = providerSnap.data() as ProviderData;
+        return {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role: "provider",
+          providerData,
+          isApproved: providerData.status === "approved",
+        };
+      }
+
+      if (role === "seeker" && hasSeekerData) {
+        const seekerData = seekerSnap.data() as SeekerData;
+        return {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role: "seeker",
+          seekerData,
+        };
+      }
+
+      // If we still don't have a role, return null (will redirect to role selection)
+      console.warn(
+        "Could not determine user role, redirecting to role selection"
+      );
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
-        role: (role === "none" ? null : role) || "seeker", // Default to seeker if role is ambiguous
-        seekerData,
-        providerData,
-        isApproved: providerData.status === "approved",
+        role: null,
       };
-    }
-
-    // Original logic for single role users
-    if (role === "provider" && hasProviderData) {
-      const providerData = providerSnap.data() as ProviderData;
+    } catch (error) {
+      console.error("Error in fetchUserData:", error);
+      // On error, try to use stored role
+      const storedRole = localStorage.getItem("userRole") as
+        | "provider"
+        | "seeker"
+        | null;
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
-        role: "provider",
-        providerData,
-        isApproved: providerData.status === "approved",
+        role: storedRole,
       };
     }
-
-    if (role === "seeker" && hasSeekerData) {
-      const seekerData = seekerSnap.data() as SeekerData;
-      return {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        role: "seeker",
-        seekerData,
-      };
-    }
-
-    return {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      role: null,
-    };
   };
 
   /* ---------- Auth state listener ---------- */
@@ -158,40 +220,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let providerUnsub: Unsubscribe | null = null;
 
     const authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("🔥 Auth state changed, user:", firebaseUser?.email);
       setLoading(true);
 
-      if (firebaseUser) {
-        const authUser = await fetchUserData(firebaseUser);
-        setUser(authUser);
-        setUserData(authUser.seekerData || authUser.providerData || null);
+      try {
+        if (firebaseUser) {
+          const authUser = await fetchUserData(firebaseUser);
+          console.log("🔥 User data fetched:", authUser);
+          setUser(authUser);
+          setUserData(authUser.seekerData || authUser.providerData || null);
 
-        // realtime provider approval update
-        if (authUser.role === "provider") {
-          providerUnsub = onSnapshot(
-            doc(db, "providers", firebaseUser.uid),
-            (snap) => {
-              if (snap.exists()) {
-                const providerData = snap.data() as ProviderData;
-                setUser((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        providerData,
-                        isApproved: providerData.status === "approved",
-                      }
-                    : prev
-                );
-                setUserData(providerData);
+          // realtime provider approval update
+          if (authUser.role === "provider") {
+            providerUnsub = onSnapshot(
+              doc(db, "providers", firebaseUser.uid),
+              (snap) => {
+                if (snap.exists()) {
+                  const providerData = snap.data() as ProviderData;
+                  setUser((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          providerData,
+                          isApproved: providerData.status === "approved",
+                        }
+                      : prev
+                  );
+                  setUserData(providerData);
+                }
               }
-            }
-          );
+            );
+          }
+        } else {
+          console.log("🔥 No Firebase user, clearing state");
+          setUser(null);
+          setUserData(null);
         }
-      } else {
+      } catch (error) {
+        console.error("🔥 Auth error:", error);
         setUser(null);
         setUserData(null);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => {
@@ -207,7 +278,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: "provider" | "seeker"
   ) => {
     try {
-      return await loginWithRole(email, password, role);
+      const result = await loginWithRole(email, password, role);
+
+      // Store role in localStorage on successful login
+      if (result.success) {
+        localStorage.setItem("userRole", role);
+        console.log("Stored role in localStorage:", role);
+      }
+
+      return result;
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -215,8 +294,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /* ---------- Logout ---------- */
   const signOut = async () => {
+    // Clear localStorage
+    localStorage.removeItem("userRole");
+    console.log("Cleared role from localStorage");
+
     await firebaseSignOut(auth);
     setUser(null);
+    setUserData(null);
   };
 
   /* ---------- Refresh ---------- */

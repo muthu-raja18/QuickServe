@@ -25,6 +25,7 @@ function AppGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Remove Navbar from here if it's in layout.tsx
 export default function RootClient({
   children,
 }: {
@@ -34,11 +35,8 @@ export default function RootClient({
     <AuthProvider>
       <LanguageProvider>
         <AppGate>
-          {/* Full viewport wrapper */}
           <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 overflow-x-hidden">
-            <Navbar />
-
-            {/* Content */}
+            <Navbar/>
             <main className="w-full">{children}</main>
           </div>
         </AppGate>

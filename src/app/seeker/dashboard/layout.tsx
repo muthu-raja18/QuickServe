@@ -43,14 +43,16 @@ const SECTION_TITLES = {
 
 /* FAST Loading - No full page spinner */
 const FastLoading = ({ lang }: { lang: "en" | "ta" }) => (
-  <div className="flex-1 p-4 lg:p-6">
-    <div className="space-y-6">
-      {/* Header Skeleton */}
-      <div className="h-8 bg-gray-200 rounded-lg w-64 animate-pulse" />
-      {/* Content Skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
-        <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+  <div className="min-h-screen bg-gray-50 pt-16">
+    <div className="flex-1 p-4 lg:p-6">
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="h-8 bg-gray-200 rounded-lg w-64 animate-pulse" />
+        {/* Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+          <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+        </div>
       </div>
     </div>
   </div>
@@ -69,17 +71,33 @@ export default function SeekerDashboardLayout({
   const [activeSection, setActiveSection] = useState<SectionType>("home");
   const [seekerAddress, setSeekerAddress] = useState<AddressData | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
 
-  /* 🔐 FAST AUTH CHECK */
+  /* 🔐 FIXED AUTH CHECK - Only redirect after initial check */
   useEffect(() => {
     if (authLoading) return;
+
+    // Mark that initial check is done
+    setInitialCheckDone(true);
+
+    console.log("Auth check - Loading:", authLoading);
+    console.log("Auth check - User:", user);
+    console.log("Auth check - User Role:", user?.role);
+
+    // Only redirect if we're sure there's no user after loading
     if (!user) {
+      console.log("No user found, redirecting to seeker login");
       router.push("/seeker/login");
       return;
     }
+
     if (user.role !== "seeker") {
+      console.log("User role is not seeker, redirecting to home");
       router.push("/");
+      return;
     }
+
+    console.log("User authenticated as seeker, staying on dashboard");
   }, [user, authLoading, router]);
 
   /* 📍 Load seeker address */
@@ -126,12 +144,12 @@ export default function SeekerDashboardLayout({
     }
   }, [activeSection]);
 
-  // Show loading ONLY if auth is still checking
-  if (authLoading) {
+  // Show loading during initial auth check
+  if (authLoading || !initialCheckDone) {
     return <FastLoading lang={lang} />;
   }
 
-  // Don't return null during redirects - show loading
+  // Don't show anything if redirecting
   if (!user || user.role !== "seeker") {
     return <FastLoading lang={lang} />;
   }
@@ -196,7 +214,7 @@ export default function SeekerDashboardLayout({
                           <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
                         </div>
                       ) : seekerAddress ? (
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">
+                        <div className="inline-flex items-center gap-2 px-3 py 1.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">
                           <MapPin className="w-4 h-4" />
                           <span className="text-sm font-medium">
                             {seekerAddress.district}, {seekerAddress.block}
