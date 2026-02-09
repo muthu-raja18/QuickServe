@@ -134,7 +134,8 @@ export default function ProviderDashboardLayout({
   });
   const [loadingStats, setLoadingStats] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [initialCheckDone, setInitialCheckDone] = useState(false); // ADDED
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [checkingApproval, setCheckingApproval] = useState(false); // 🔥 ADDED
 
   // Set mounted state
   useEffect(() => {
@@ -153,40 +154,61 @@ export default function ProviderDashboardLayout({
     [lang]
   );
 
-  // 🔥 FIXED: Redirect if not authenticated or not approved provider
+  // 🔥 FIXED: Check if provider is approved by checking Firestore directly
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || checkingApproval) return;
 
-    // Mark that initial check is done
-    setInitialCheckDone(true);
+    const checkProviderApproval = async () => {
+      console.log("Starting provider approval check...");
 
-    console.log("Provider Auth Check:", {
-      loading: authLoading,
-      hasUser: !!user,
-      userRole: user?.role,
-      isApproved: user?.isApproved,
-      hasProviderData: !!user?.providerData,
-    });
+      // Mark that initial check is done
+      setInitialCheckDone(true);
 
-    if (!user) {
-      console.log("No user found, redirecting to provider login");
-      router.push("/provider/login");
-      return;
-    }
+      if (!user) {
+        console.log("No user found, redirecting to provider login");
+        router.push("/provider/login");
+        return;
+      }
 
-    if (user.role !== "provider") {
-      console.log("User is not a provider, redirecting to home");
-      router.push("/");
-      return;
-    }
+      if (user.role !== "provider") {
+        console.log("User is not a provider, redirecting to home");
+        router.push("/");
+        return;
+      }
 
-    if (!user.isApproved) {
-      console.log("Provider not approved, redirecting to waiting page");
-      router.push("/provider/waiting");
-      return;
-    }
+      // 🔥 CRITICAL FIX: Check Firestore directly for approval status
+      try {
+        setCheckingApproval(true);
+        const providerDoc = await getDoc(doc(db, "providers", user.uid));
 
-    console.log("Provider authenticated and approved, staying on dashboard");
+        if (!providerDoc.exists()) {
+          console.log("Provider document not found, redirecting to waiting");
+          router.push("/provider/waiting");
+          return;
+        }
+
+        const providerData = providerDoc.data();
+        console.log("Firestore provider status:", providerData.status);
+
+        if (providerData.status !== "approved") {
+          console.log("Provider not approved, redirecting to waiting page");
+          router.push("/provider/waiting");
+          return;
+        }
+
+        console.log("✅ Provider is approved, staying on dashboard");
+      } catch (error) {
+        console.error("Error checking provider approval:", error);
+        // On error, try to use the cached isApproved value
+        if (!user.isApproved) {
+          router.push("/provider/waiting");
+        }
+      } finally {
+        setCheckingApproval(false);
+      }
+    };
+
+    checkProviderApproval();
   }, [user, authLoading, router]);
 
   // Calculate if request is urgent (expiring in <30 minutes) - Memoized
@@ -475,15 +497,14 @@ export default function ProviderDashboardLayout({
     dashboardStats.awaitingConfirmation,
   ]);
 
-  // Show loading while checking auth
-  if (authLoading || !mounted || !initialCheckDone) {
-    // UPDATED
+  // Show loading while checking auth or approval
+  if (authLoading || !mounted || checkingApproval) {
     return <DashboardLoading lang={lang} />;
   }
 
   // Don't render if no user or not provider
-  if (!user || user.role !== "provider" || !user.isApproved) {
-    return <DashboardLoading lang={lang} />; // Return loading instead of null
+  if (!user || user.role !== "provider") {
+    return <DashboardLoading lang={lang} />;
   }
 
   return (

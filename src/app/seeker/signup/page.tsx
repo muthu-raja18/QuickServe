@@ -1,42 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../../firebase/config";
-import {
-  doc,
-  setDoc,
-  getDocs,
-  query,
-  where,
-  collection,
-} from "firebase/firestore";
+import { Eye, EyeOff, Home, Loader2 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import Notification from "../../components/Notification";
-import { Eye, EyeOff } from "lucide-react";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../../firebase/config";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
-export default function SeekerSignupPage() {
+const SeekerSignupPage: React.FC = () => {
   const router = useRouter();
   const { lang } = useLanguage();
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [notif, setNotif] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
-  const handleSignup = async (e: React.FormEvent) => {
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password !== confirmPassword) {
+    // Validation
+    const requiredFields = ["name", "email", "password", "confirmPassword"];
+    const missing = requiredFields.filter(
+      (f) => !formData[f as keyof typeof formData]
+    );
+
+    if (missing.length > 0) {
+      setNotif({
+        message:
+          lang === "en"
+            ? "Please fill all mandatory fields"
+            : "அனைத்து கட்டாய புலங்களையும் நிரப்பவும்",
+        type: "error",
+      });
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
       setNotif({
         message:
           lang === "en"
@@ -47,155 +73,318 @@ export default function SeekerSignupPage() {
       return;
     }
 
+    if (formData.password.length < 6) {
+      setNotif({
+        message:
+          lang === "en"
+            ? "Password must be at least 6 characters"
+            : "கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்",
+        type: "error",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      /* ---------- 🔐 ROLE CONFLICT CHECK ---------- */
-      const q = query(collection(db, "users"), where("email", "==", email));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        const existingUser = snapshot.docs[0].data();
-
-        if (existingUser.role === "provider") {
-          setNotif({
-            message:
-              lang === "en"
-                ? "This email is already registered as a Provider"
-                : "இந்த மின்னஞ்சல் ஏற்கனவே சேவை வழங்குநராக பதிவு செய்யப்பட்டுள்ளது",
-            type: "error",
-          });
-          setLoading(false);
-          return;
-        }
-      }
-
-      /* ---------- FIREBASE AUTH SIGNUP ---------- */
-      const result = await createUserWithEmailAndPassword(
+      // 1. Create user with Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
         auth,
-        email,
-        password
+        formData.email.toLowerCase(),
+        formData.password
       );
 
-      /* ---------- SAVE USER ROLE ---------- */
-      await setDoc(doc(db, "users", result.user.uid), {
-        name,
-        email,
+      const user = userCredential.user;
+
+      // 2. Store role in localStorage
+      localStorage.setItem("userRole", "seeker");
+
+      // 3. Create user document in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        name: formData.name,
+        email: formData.email.toLowerCase(),
         role: "seeker",
-        authProvider: "password",
-        createdAt: new Date(),
+        emailVerified: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
 
       setNotif({
-        message: lang === "en" ? "Signup successful!" : "பதிவு வெற்றி!",
+        message:
+          lang === "en"
+            ? "🎉 Registration successful! Redirecting to dashboard..."
+            : "🎉 பதிவு வெற்றிகரமாக! டாஷ்போர்டுக்கு திருப்பி விடப்படுகிறது...",
         type: "success",
       });
 
-      setTimeout(() => router.push("/seeker/dashboard"), 1200);
+      // Redirect to seeker dashboard
+      setTimeout(() => {
+        router.push("/seeker/dashboard");
+      }, 1500);
     } catch (err: any) {
-      let message = lang === "en" ? "Signup failed" : "பதிவு தோல்வி";
+      console.error("Signup error:", err);
 
+      let errorMessage = "Registration failed";
       if (err.code === "auth/email-already-in-use") {
-        message =
+        errorMessage =
           lang === "en"
-            ? "This email is already registered. Please login."
-            : "இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது";
+            ? "Email already exists. Please login."
+            : "மின்னஞ்சல் ஏற்கனவே உள்ளது. தயவு செய்து உள்நுழையவும்";
+      } else if (err.code === "auth/invalid-email") {
+        errorMessage =
+          lang === "en" ? "Invalid email address" : "தவறான மின்னஞ்சல் முகவரி";
+      } else if (err.code === "auth/weak-password") {
+        errorMessage =
+          lang === "en"
+            ? "Password is too weak. Use at least 6 characters"
+            : "கடவுச்சொல் மிகவும் பலவீனமானது. குறைந்தது 6 எழுத்துகளைப் பயன்படுத்தவும்";
       }
 
-      setNotif({ message, type: "error" });
+      setNotif({
+        message: errorMessage,
+        type: "error",
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  if (!isMounted) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 flex flex-col">
-      <div className="h-16 flex-shrink-0" />
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col">
+      {/* Spacing from Navbar */}
+      <div className="h-16 flex-shrink-0"></div>
 
-      <div className="flex-1 flex items-center justify-center px-4 py-6">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="w-full max-w-sm"
-        >
-          <div className="bg-white rounded-2xl shadow-xl border border-indigo-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-4 text-center">
-              <h1 className="text-xl font-bold text-white">QuickServe</h1>
-              <p className="text-indigo-100 text-sm mt-1">
-                {lang === "en"
-                  ? "Service Seeker Signup"
-                  : "சேவை தேடுபவர் பதிவு"}
-              </p>
+      {/* Scrollable form container */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="w-full max-w-sm"
+          >
+            {/* Card Container */}
+            <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200 mb-4">
+              {/* Header Section with Indigo Theme */}
+              <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-4 text-center">
+                <h1 className="text-xl font-bold text-white">QuickServe</h1>
+                <h2 className="text-base font-semibold text-indigo-100 mt-1">
+                  {lang === "en"
+                    ? "Seeker Registration"
+                    : "சேவை தேடுபவர் பதிவு"}
+                </h2>
+                <p className="text-xs text-indigo-200 mt-1">
+                  {lang === "en"
+                    ? "Join as a service seeker"
+                    : "சேவை தேடுபவராக இணையுங்கள்"}
+                </p>
+              </div>
+
+              {/* Form Section */}
+              <div className="p-5">
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  {/* Full Name */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {lang === "en" ? "Full Name" : "முழு பெயர்"} *
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      placeholder={
+                        lang === "en"
+                          ? "Enter your full name"
+                          : "உங்கள் முழு பெயரை உள்ளிடவும்"
+                      }
+                      value={formData.name}
+                      onChange={handleChange}
+                      required
+                      disabled={loading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-indigo-300"
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {lang === "en" ? "Email Address" : "மின்னஞ்சல் முகவரி"} *
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder={
+                        lang === "en"
+                          ? "Enter your email address"
+                          : "உங்கள் மின்னஞ்சலை உள்ளிடவும்"
+                      }
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                      disabled={loading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-indigo-300"
+                    />
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {lang === "en" ? "Password" : "கடவுச்சொல்"} *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        placeholder={
+                          lang === "en"
+                            ? "Enter password (min 6 characters)"
+                            : "கடவுச்சொல்லை உள்ளிடவும் (குறைந்தது 6 எழுத்துகள்)"
+                        }
+                        value={formData.password}
+                        onChange={handleChange}
+                        required
+                        minLength={6}
+                        disabled={loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-indigo-300 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        disabled={loading}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 disabled:text-gray-400 disabled:hover:bg-transparent active:bg-indigo-100 active:scale-95"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showPassword ? (
+                          <EyeOff size={16} />
+                        ) : (
+                          <Eye size={16} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {lang === "en"
+                        ? "Confirm Password"
+                        : "கடவுச்சொல் உறுதிப்படுத்தல்"}{" "}
+                      *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        placeholder={
+                          lang === "en"
+                            ? "Confirm your password"
+                            : "உங்கள் கடவுச்சொல்லை உறுதிப்படுத்தவும்"
+                        }
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        required
+                        disabled={loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-indigo-300 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        disabled={loading}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 disabled:text-gray-400 disabled:hover:bg-transparent active:bg-indigo-100 active:scale-95"
+                        aria-label={
+                          showConfirmPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff size={16} />
+                        ) : (
+                          <Eye size={16} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm shadow-md hover:shadow-lg active:shadow-md"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                        {lang === "en"
+                          ? "Processing..."
+                          : "செயல்படுத்தப்படுகிறது..."}
+                      </>
+                    ) : lang === "en" ? (
+                      "Complete Registration"
+                    ) : (
+                      "பதிவை முடிக்கவும்"
+                    )}
+                  </button>
+
+                  {/* Back to Home Button */}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/")}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 active:from-indigo-300 active:to-purple-300 text-indigo-700 border border-indigo-200 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:border-indigo-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow active:shadow-sm"
+                  >
+                    <Home className="w-4 h-4" />
+                    {lang === "en" ? "Back to Home" : "முகப்புக்குத் திரும்பு"}
+                  </button>
+                </form>
+
+                {/* Login Redirect */}
+                <div className="mt-4 text-center">
+                  <p className="text-xs text-gray-600">
+                    {lang === "en"
+                      ? "Already have an account?"
+                      : "ஏற்கனவே கணக்கு உள்ளதா?"}{" "}
+                    <button
+                      type="button"
+                      onClick={() => !loading && router.push("/seeker/login")}
+                      disabled={loading}
+                      className="text-indigo-600 hover:text-indigo-700 active:text-indigo-800 font-medium underline disabled:text-gray-500 transition-all duration-200 hover:scale-105 active:scale-95"
+                    >
+                      {lang === "en" ? "Login here" : "இங்கே உள்நுழையவும்"}
+                    </button>
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="p-5">
-              <form onSubmit={handleSignup} className="space-y-3">
-                <Input
-                  label={lang === "en" ? "Full Name" : "முழு பெயர்"}
-                  value={name}
-                  onChange={setName}
-                  disabled={loading}
-                />
-                <Input
-                  label={lang === "en" ? "Email" : "மின்னஞ்சல்"}
-                  type="email"
-                  value={email}
-                  onChange={setEmail}
-                  disabled={loading}
-                />
-                <PasswordInput
-                  label={lang === "en" ? "Password" : "கடவுச்சொல்"}
-                  value={password}
-                  onChange={setPassword}
-                  show={showPassword}
-                  toggle={() => setShowPassword(!showPassword)}
-                  disabled={loading}
-                />
-                <PasswordInput
-                  label={
-                    lang === "en" ? "Confirm Password" : "கடவுச்சொல் உறுதிசெய்க"
-                  }
-                  value={confirmPassword}
-                  onChange={setConfirmPassword}
-                  show={showConfirm}
-                  toggle={() => setShowConfirm(!showConfirm)}
-                  disabled={loading}
-                />
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                >
-                  {loading
-                    ? lang === "en"
-                      ? "Creating account..."
-                      : "கணக்கு உருவாக்கப்படுகிறது..."
-                    : lang === "en"
-                    ? "Sign Up"
-                    : "பதிவு செய்யவும்"}
-                </button>
-              </form>
-
-              <p className="text-center text-xs text-gray-600 mt-4">
-                {lang === "en"
-                  ? "Already have an account?"
-                  : "ஏற்கனவே கணக்கு உள்ளதா?"}{" "}
-                <span
-                  onClick={() => !loading && router.push("/seeker/login")}
-                  className="text-indigo-600 font-semibold cursor-pointer hover:underline"
-                >
-                  {lang === "en" ? "Login" : "உள்நுழைய"}
-                </span>
-              </p>
-            </div>
-          </div>
-        </motion.div>
+            {/* Footer Note */}
+            <p className="text-center text-[10px] text-gray-500 px-2">
+              {lang === "en"
+                ? "All fields are mandatory for verification."
+                : "சரிபார்ப்புக்கு அனைத்து புலங்களும் கட்டாயமாகும்."}
+            </p>
+          </motion.div>
+        </div>
       </div>
 
+      {/* Bottom spacing */}
+      <div className="h-4 flex-shrink-0"></div>
+
+      {/* Notification */}
       {notif && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm px-4">
           <Notification
             message={notif.message}
             type={notif.type}
@@ -205,55 +394,6 @@ export default function SeekerSignupPage() {
       )}
     </div>
   );
-}
+};
 
-/* ---------- INPUTS (UNCHANGED) ---------- */
-function Input({ label, value, onChange, type = "text", disabled }: any) {
-  return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium text-gray-700">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        required
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none text-sm"
-      />
-    </div>
-  );
-}
-
-function PasswordInput({
-  label,
-  value,
-  onChange,
-  show,
-  toggle,
-  disabled,
-}: any) {
-  return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium text-gray-700">{label}</label>
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          required
-          minLength={6}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none text-sm pr-10"
-        />
-        <button
-          type="button"
-          onClick={toggle}
-          disabled={disabled}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-indigo-600"
-        >
-          {show ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
-      </div>
-    </div>
-  );
-}
+export default SeekerSignupPage;

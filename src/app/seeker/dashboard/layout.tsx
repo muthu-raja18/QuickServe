@@ -64,41 +64,45 @@ export default function SeekerDashboardLayout({
   children: React.ReactNode;
 }) {
   const { lang } = useLanguage();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading, initialized } = useAuth(); // ADDED initialized
   const router = useRouter();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionType>("home");
   const [seekerAddress, setSeekerAddress] = useState<AddressData | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
-  const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [authCheckComplete, setAuthCheckComplete] = useState(false);
 
-  /* 🔐 FIXED AUTH CHECK - Only redirect after initial check */
+  /* 🔐 FIXED AUTH CHECK - Wait for BOTH loading to finish AND initialized */
   useEffect(() => {
-    if (authLoading) return;
+    if (loading || !initialized) return;
 
-    // Mark that initial check is done
-    setInitialCheckDone(true);
-
-    console.log("Auth check - Loading:", authLoading);
+    console.log(
+      "Auth check complete - Loading:",
+      loading,
+      "Initialized:",
+      initialized
+    );
     console.log("Auth check - User:", user);
     console.log("Auth check - User Role:", user?.role);
 
-    // Only redirect if we're sure there's no user after loading
+    setAuthCheckComplete(true);
+
+    // Only redirect if we're sure there's no user after loading AND initialization
     if (!user) {
-      console.log("No user found, redirecting to seeker login");
+      console.log("No user found after initialization, redirecting to login");
       router.push("/seeker/login");
       return;
     }
 
     if (user.role !== "seeker") {
-      console.log("User role is not seeker, redirecting to home");
+      console.log("Wrong role, redirecting to home");
       router.push("/");
       return;
     }
 
-    console.log("User authenticated as seeker, staying on dashboard");
-  }, [user, authLoading, router]);
+    console.log("Auth successful, user is seeker");
+  }, [user, loading, initialized, router]);
 
   /* 📍 Load seeker address */
   useEffect(() => {
@@ -145,11 +149,11 @@ export default function SeekerDashboardLayout({
   }, [activeSection]);
 
   // Show loading during initial auth check
-  if (authLoading || !initialCheckDone) {
+  if (loading || !initialized || !authCheckComplete) {
     return <FastLoading lang={lang} />;
   }
 
-  // Don't show anything if redirecting
+  // Don't show anything if redirecting (should have redirected by now)
   if (!user || user.role !== "seeker") {
     return <FastLoading lang={lang} />;
   }
@@ -214,7 +218,7 @@ export default function SeekerDashboardLayout({
                           <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
                         </div>
                       ) : seekerAddress ? (
-                        <div className="inline-flex items-center gap-2 px-3 py 1.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">
                           <MapPin className="w-4 h-4" />
                           <span className="text-sm font-medium">
                             {seekerAddress.district}, {seekerAddress.block}

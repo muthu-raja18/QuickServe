@@ -1,4 +1,3 @@
-// src/app/provider/signup/page.tsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -21,7 +20,18 @@ import {
   Loader2,
   CheckCircle,
   User,
+  Home,
 } from "lucide-react";
+import { auth, db } from "../../firebase/config";
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 // All 38 Districts of Tamil Nadu
 const TAMIL_NADU_DISTRICTS = [
@@ -67,7 +77,6 @@ const TAMIL_NADU_DISTRICTS = [
 
 // Updated Comprehensive Service Types with General & Specialized
 const SERVICE_TYPES = [
-  // Construction & Repair (General)
   { en: "Plumbing", ta: "குழாய் வேலை", value: "plumbing" },
   { en: "Electrical", ta: "மின்சாரம்", value: "electrical" },
   { en: "Carpentry", ta: "தச்சு வேலை", value: "carpentry" },
@@ -77,8 +86,6 @@ const SERVICE_TYPES = [
   { en: "Home Repair", ta: "வீடு பழுது", value: "home_repair" },
   { en: "Furniture Repair", ta: "தட்டு பழுது", value: "furniture_repair" },
   { en: "Waterproofing", ta: "நீர்புகா வேலை", value: "waterproofing" },
-
-  // Cleaning Services
   { en: "Home Cleaning", ta: "வீட்டு சுத்தம்", value: "home_cleaning" },
   { en: "Deep Cleaning", ta: "ஆழமான சுத்தம்", value: "deep_cleaning" },
   { en: "Office Cleaning", ta: "அலுவலக சுத்தம்", value: "office_cleaning" },
@@ -93,8 +100,6 @@ const SERVICE_TYPES = [
     ta: "தொட்டி & கழிவுநீர் சுத்தம்",
     value: "tank_drain_cleaning",
   },
-
-  // Appliance Repair (General & Specialized)
   {
     en: "Appliance Repair",
     ta: "பயன்பாட்டு சாதன பழுது",
@@ -123,8 +128,6 @@ const SERVICE_TYPES = [
     ta: "நீர் சுத்திகரிப்பான் சேவைகள்",
     value: "water_purifier_services",
   },
-
-  // Vehicle Services (General & Specialized)
   { en: "Mechanic", ta: "மெக்கானிக்", value: "mechanic" },
   { en: "Car Mechanic", ta: "கார் மெக்கானிக்", value: "car_mechanic" },
   { en: "Bike Mechanic", ta: "பைக் மெக்கானிக்", value: "bike_mechanic" },
@@ -136,16 +139,12 @@ const SERVICE_TYPES = [
     value: "vehicle_painting",
   },
   { en: "Car AC Repair", ta: "கார் ஏசி பழுது", value: "car_ac_repair" },
-
-  // Beauty & Wellness
   { en: "Hair Stylist", ta: "முடி அலங்காரம்", value: "hair_stylist" },
   { en: "Beautician", ta: "அழகு சாதனம்", value: "beautician" },
   { en: "Makeup Artist", ta: "மேக்அப் கலைஞர்", value: "makeup_artist" },
   { en: "Massage Therapy", ta: "மசாஜ் சிகிச்சை", value: "massage_therapy" },
   { en: "Spa Services", ta: "ஸ்பா சேவைகள்", value: "spa_services" },
   { en: "Nail Art", ta: "நக கலை", value: "nail_art" },
-
-  // Education & Tutoring
   { en: "Tutoring", ta: "பயிற்சி", value: "tutoring" },
   { en: "Math Tutor", ta: "கணித பயிற்றுவிப்பாளர்", value: "math_tutor" },
   {
@@ -170,8 +169,6 @@ const SERVICE_TYPES = [
     ta: "உடற்பயிற்சி பயிற்றுவிப்பாளர்",
     value: "fitness_trainer",
   },
-
-  // IT & Electronics
   { en: "Computer Services", ta: "கணினி சேவைகள்", value: "computer_services" },
   { en: "Computer Repair", ta: "கணினி பழுது", value: "computer_repair" },
   { en: "Laptop Repair", ta: "லேப்டாப் பழுது", value: "laptop_repair" },
@@ -192,8 +189,6 @@ const SERVICE_TYPES = [
     ta: "மென்பொருள் நிறுவுதல்",
     value: "software_installation",
   },
-
-  // Pest Control & Gardening
   { en: "Pest Control", ta: "பூச்சி கட்டுப்பாடு", value: "pest_control" },
   {
     en: "Termite Control",
@@ -208,8 +203,6 @@ const SERVICE_TYPES = [
     value: "lawn_maintenance",
   },
   { en: "Tree Services", ta: "மர சேவைகள்", value: "tree_services" },
-
-  // Event Services
   { en: "Photographer", ta: "புகைப்படக் கலைஞர்", value: "photographer" },
   { en: "Videographer", ta: "காணொளி கலைஞர்", value: "videographer" },
   { en: "Catering", ta: "உணவு வழங்கல்", value: "catering" },
@@ -224,8 +217,6 @@ const SERVICE_TYPES = [
     ta: "திருமண திட்டமிடுபவர்",
     value: "wedding_planner",
   },
-
-  // Professional Services
   { en: "Legal Services", ta: "சட்ட சேவைகள்", value: "legal_services" },
   { en: "Accountant", ta: "கணக்காளர்", value: "accountant" },
   { en: "Tax Consultant", ta: "வரி ஆலோசகர்", value: "tax_consultant" },
@@ -236,8 +227,6 @@ const SERVICE_TYPES = [
   },
   { en: "Architect", ta: "கட்டடக் கலைஞர்", value: "architect" },
   { en: "Tailor", ta: "தையல்காரர்", value: "tailor" },
-
-  // Delivery & Transportation
   { en: "Packing & Moving", ta: "பேக்கிங் & நகரும்", value: "packing_moving" },
   { en: "Goods Delivery", ta: "பொருட்கள் விநியோகம்", value: "goods_delivery" },
   {
@@ -246,8 +235,6 @@ const SERVICE_TYPES = [
     value: "transport_services",
   },
   { en: "Driver Services", ta: "டிரைவர் சேவைகள்", value: "driver_services" },
-
-  // Healthcare Services
   { en: "Nursing Care", ta: "சிகிச்சை பராமரிப்பு", value: "nursing_care" },
   { en: "Elderly Care", ta: "மூப்போர் பராமரிப்பு", value: "elderly_care" },
   { en: "Babysitter", ta: "குழந்தை பராமரிப்பு", value: "babysitter" },
@@ -257,8 +244,6 @@ const SERVICE_TYPES = [
     value: "physiotherapist",
   },
   { en: "Home Nurse", ta: "வீட்டுச் செவிலியர்", value: "home_nurse" },
-
-  // Miscellaneous Services
   { en: "Salon at Home", ta: "வீட்டில் சலூன்", value: "salon_at_home" },
   { en: "Pet Care", ta: "செல்லப்பிராணி பராமரிப்பு", value: "pet_care" },
   { en: "Pet Grooming", ta: "செல்லப்பிராணி அலங்காரம்", value: "pet_grooming" },
@@ -283,8 +268,6 @@ const SERVICE_TYPES = [
     value: "gas_stove_repair",
   },
   { en: "Chimney Cleaning", ta: "சிம்னி சுத்தம்", value: "chimney_cleaning" },
-
-  // Other
   { en: "Other Services", ta: "மற்ற சேவைகள்", value: "other_services" },
 ];
 
@@ -323,7 +306,6 @@ const ProviderSignupPage: React.FC = () => {
   // File upload states
   const [photoUploading, setPhotoUploading] = useState(false);
   const [proofUploading, setProofUploading] = useState(false);
-  const [uploadWidget, setUploadWidget] = useState<any>(null);
 
   useEffect(() => setIsMounted(true), []);
 
@@ -349,7 +331,7 @@ const ProviderSignupPage: React.FC = () => {
     script.src = "https://upload-widget.cloudinary.com/global/all.js";
     script.async = true;
     script.onload = () => {
-      initializeCloudinaryWidget();
+      console.log("Cloudinary widget loaded");
     };
     document.body.appendChild(script);
 
@@ -359,13 +341,6 @@ const ProviderSignupPage: React.FC = () => {
       }
     };
   }, []);
-
-  const initializeCloudinaryWidget = () => {
-    if (typeof window.cloudinary === "undefined") return;
-
-    // You can initialize the widget here or create on-demand
-    console.log("Cloudinary widget ready");
-  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -400,7 +375,7 @@ const ProviderSignupPage: React.FC = () => {
       .replace(/\./g, "_dot_")
       .replace(/[^a-zA-Z0-9_]/g, "");
 
-    const widget = window.cloudinary.createUploadWidget(
+    const widget = (window as any).cloudinary.createUploadWidget(
       {
         cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
         uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
@@ -481,7 +456,7 @@ const ProviderSignupPage: React.FC = () => {
       .replace(/\./g, "_dot_")
       .replace(/[^a-zA-Z0-9_]/g, "");
 
-    const widget = window.cloudinary.createUploadWidget(
+    const widget = (window as any).cloudinary.createUploadWidget(
       {
         cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
         uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
@@ -545,29 +520,58 @@ const ProviderSignupPage: React.FC = () => {
     setFormData((prev) => ({ ...prev, proofLink: "" }));
   };
 
-  // Check if email already registered
+  // ✅ FIXED: Enhanced email conflict check
   const checkEmailConflict = async (email: string) => {
     const emailLower = email.toLowerCase();
-    const existingRole = await getActualRole(emailLower);
 
-    if (existingRole === "seeker") {
-      throw new Error(
-        lang === "en"
-          ? "This email is already registered as a service seeker."
-          : "இந்த மின்னஞ்சல் ஏற்கனவே சேவை தேடுபவராக பதிவு செய்யப்பட்டுள்ளது."
+    try {
+      // 1. Check if email exists in providers collection
+      const providersQuery = query(
+        collection(db, "providers"),
+        where("email", "==", emailLower)
       );
-    }
+      const providersSnapshot = await getDocs(providersQuery);
 
-    if (existingRole === "provider") {
-      throw new Error(
-        lang === "en"
-          ? "This email is already registered as a provider."
-          : "இந்த மின்னஞ்சல் ஏற்கனவே சேவை வழங்குநராக பதிவு செய்யப்பட்டுள்ளது."
+      if (!providersSnapshot.empty) {
+        throw new Error(
+          lang === "en"
+            ? "This email is already registered as a provider."
+            : "இந்த மின்னஞ்சல் ஏற்கனவே சேவை வழங்குநராக பதிவு செய்யப்பட்டுள்ளது."
+        );
+      }
+
+      // 2. Check if email exists in users collection (seekers)
+      const usersQuery = query(
+        collection(db, "users"),
+        where("email", "==", emailLower),
+        where("role", "==", "seeker")
       );
+      const usersSnapshot = await getDocs(usersQuery);
+
+      if (!usersSnapshot.empty) {
+        throw new Error(
+          lang === "en"
+            ? "This email is already registered as a service seeker."
+            : "இந்த மின்னஞ்சல் ஏற்கனவே சேவை தேடுபவராக பதிவு செய்யப்பட்டுள்ளது."
+        );
+      }
+    } catch (error: any) {
+      console.error("Email conflict check error:", error);
+      if (
+        error.message.includes("insufficient") ||
+        error.message.includes("permission")
+      ) {
+        throw new Error(
+          lang === "en"
+            ? "Unable to verify email. Please try again or contact support."
+            : "மின்னஞ்சலை சரிபார்க்க முடியவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது ஆதரவைத் தொடர்பு கொள்ளவும்."
+        );
+      }
+      throw error;
     }
   };
 
-  // Send OTP to Email
+  // Send OTP - SIMPLE FIX
   const handleSendOTP = async () => {
     if (!formData.email) {
       setNotif({
@@ -585,23 +589,43 @@ const ProviderSignupPage: React.FC = () => {
     setLoading(true);
     try {
       await checkEmailConflict(emailLower);
-      await generateEmailOTP(emailLower);
+      await generateEmailOTP(emailLower); // Just await, don't check result
       setOtpSent(true);
       setNotif({
         message:
           lang === "en"
-            ? "OTP sent to your email!"
-            : "OTP உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது!",
+            ? "OTP sent to your email! Check your inbox/spam."
+            : "OTP உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது! உங்கள் இன்பாக்ஸ்/ஸ்பேம் சரிபார்க்கவும்",
         type: "success",
       });
     } catch (error: any) {
-      setNotif({ message: error.message, type: "error" });
+      console.error("OTP Send Error:", error);
+
+      let errorMessage = error.message;
+      if (
+        error.message.includes("permission") ||
+        error.message.includes("insufficient")
+      ) {
+        errorMessage =
+          lang === "en"
+            ? "Database permission error. Please check Firestore security rules."
+            : "தரவுத்தள அனுமதி பிழை. Firestore பாதுகாப்பு விதிகளை சரிபார்க்கவும்.";
+      } else if (error.message.includes("EmailJS")) {
+        errorMessage =
+          lang === "en"
+            ? "Email service error. Please try again."
+            : "மின்னஞ்சல் சேவை பிழை. மீண்டும் முயற்சிக்கவும்.";
+      } else if (error.message.includes("already registered")) {
+        errorMessage = error.message;
+      }
+
+      setNotif({ message: errorMessage, type: "error" });
     } finally {
       setLoading(false);
     }
   };
 
-  // Verify OTP
+  // ✅ FIXED: Verify OTP with better error handling
   const handleVerifyOTP = async () => {
     if (!otp || otp.length !== 6) {
       setNotif({
@@ -621,6 +645,7 @@ const ProviderSignupPage: React.FC = () => {
         formData.email.toLowerCase(),
         otp
       );
+
       if (verification.success) {
         setOtpVerified(true);
         setNotif({
@@ -628,28 +653,44 @@ const ProviderSignupPage: React.FC = () => {
           type: "success",
         });
       } else {
-        setNotif({ message: verification.message, type: "error" });
+        setNotif({
+          message: verification.message || "Invalid OTP",
+          type: "error",
+        });
       }
     } catch (error: any) {
-      setNotif({ message: error.message, type: "error" });
+      console.error("OTP Verify Error:", error);
+      setNotif({
+        message: error.message || "Error verifying OTP",
+        type: "error",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // Resend OTP
   const handleResendOTP = async () => {
     setLoading(true);
     setOtp("");
     try {
       await checkEmailConflict(formData.email.toLowerCase());
-      await generateEmailOTP(formData.email.toLowerCase());
+      await generateEmailOTP(formData.email.toLowerCase()); // Just await
       setNotif({
         message: lang === "en" ? "New OTP sent!" : "புதிய OTP அனுப்பப்பட்டது!",
         type: "success",
       });
     } catch (error: any) {
-      setNotif({ message: error.message, type: "error" });
+      console.error("Resend OTP Error:", error);
+
+      let errorMessage = error.message;
+      if (error.message.includes("permission")) {
+        errorMessage =
+          lang === "en"
+            ? "Cannot send OTP. Database permission issue."
+            : "OTP அனுப்ப முடியவில்லை. தரவுத்தள அனுமதி பிரச்சனை.";
+      }
+
+      setNotif({ message: errorMessage, type: "error" });
     } finally {
       setLoading(false);
     }
@@ -745,6 +786,7 @@ const ProviderSignupPage: React.FC = () => {
     try {
       const providerData = {
         name: formData.name,
+        email: formData.email.toLowerCase(),
         phone: formData.phone,
         serviceType: formData.serviceType,
         district: formData.district,
@@ -766,7 +808,29 @@ const ProviderSignupPage: React.FC = () => {
         providerData
       );
 
-      if (result.success) {
+      if (result.success && auth.currentUser) {
+        // ✅ CRITICAL FIX: Store role in localStorage IMMEDIATELY
+        localStorage.setItem("userRole", "provider");
+
+        // ✅ CRITICAL FIX: Create provider document in Firestore
+        await setDoc(doc(db, "providers", auth.currentUser.uid), {
+          uid: auth.currentUser.uid,
+          ...providerData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        // ✅ CRITICAL FIX: Also create a user document with provider role
+        await setDoc(doc(db, "users", auth.currentUser.uid), {
+          uid: auth.currentUser.uid,
+          name: formData.name,
+          email: formData.email.toLowerCase(),
+          phone: formData.phone,
+          role: "provider",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
         setNotif({
           message:
             lang === "en"
@@ -775,12 +839,24 @@ const ProviderSignupPage: React.FC = () => {
           type: "success",
         });
 
-        setTimeout(() => router.push("/provider/waiting"), 2000);
+        // Wait 2 seconds then redirect to waiting page
+        setTimeout(() => {
+          router.push("/provider/waiting");
+        }, 2000);
       } else {
-        setNotif({ message: result.error || "Error", type: "error" });
+        setNotif({
+          message: result.error || "Registration failed",
+          type: "error",
+        });
       }
     } catch (err: any) {
-      setNotif({ message: err.message, type: "error" });
+      console.error("Signup error:", err);
+      setNotif({
+        message:
+          err.message ||
+          (lang === "en" ? "Registration failed" : "பதிவு தோல்வி"),
+        type: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -788,14 +864,14 @@ const ProviderSignupPage: React.FC = () => {
 
   if (!isMounted) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
         <div className="animate-pulse">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 flex flex-col">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex flex-col">
       {/* Spacing from Navbar */}
       <div className="h-16 flex-shrink-0"></div>
 
@@ -810,15 +886,15 @@ const ProviderSignupPage: React.FC = () => {
           >
             {/* Card Container */}
             <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200 mb-4">
-              {/* Header Section */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-center">
+              {/* Header Section with GREEN Theme */}
+              <div className="bg-gradient-to-r from-green-600 to-emerald-700 p-4 text-center">
                 <h1 className="text-xl font-bold text-white">QuickServe</h1>
-                <h2 className="text-base font-semibold text-blue-100 mt-1">
+                <h2 className="text-base font-semibold text-green-100 mt-1">
                   {lang === "en"
                     ? "Provider Registration"
                     : "சேவை வழங்குநர் பதிவு"}
                 </h2>
-                <p className="text-xs text-blue-200 mt-1">
+                <p className="text-xs text-green-200 mt-1">
                   {lang === "en"
                     ? "Join as a verified service provider"
                     : "சரிபார்க்கப்பட்ட சேவை வழங்குநராக இணையுங்கள்"}
@@ -828,7 +904,7 @@ const ProviderSignupPage: React.FC = () => {
               {/* Form Section */}
               <div className="p-5">
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* PROFILE PHOTO - MOVED TO TOP */}
+                  {/* PROFILE PHOTO */}
                   <div className="space-y-3">
                     <label className="block text-xs font-medium text-gray-700 text-center">
                       {lang === "en" ? "Profile Photo" : "சுயபடம்"} *
@@ -839,7 +915,7 @@ const ProviderSignupPage: React.FC = () => {
                       <div className="relative w-32 h-32 mb-4">
                         {formData.photoLink ? (
                           <>
-                            <div className="w-full h-full rounded-full overflow-hidden border-4 border-blue-100 shadow-lg">
+                            <div className="w-full h-full rounded-full overflow-hidden border-4 border-green-100 shadow-lg">
                               <img
                                 src={formData.photoLink}
                                 alt="Profile preview"
@@ -855,15 +931,15 @@ const ProviderSignupPage: React.FC = () => {
                               type="button"
                               onClick={removePhoto}
                               disabled={photoUploading || loading}
-                              className="absolute -top-1 -right-1 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors disabled:opacity-50"
+                              className="absolute -top-1 -right-1 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-all duration-200 active:scale-95 cursor-pointer"
                             >
                               <X className="w-4 h-4" />
                             </button>
                           </>
                         ) : (
-                          <div className="w-full h-full rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center bg-gray-50 hover:border-blue-400 transition-colors">
+                          <div className="w-full h-full rounded-full border-4 border-dashed border-gray-300 flex items-center justify-center bg-gray-50 hover:border-green-400 transition-all duration-200">
                             {photoUploading ? (
-                              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                              <Loader2 className="w-12 h-12 text-green-500 animate-spin" />
                             ) : (
                               <User className="w-12 h-12 text-gray-400" />
                             )}
@@ -875,7 +951,7 @@ const ProviderSignupPage: React.FC = () => {
                         type="button"
                         onClick={uploadPhoto}
                         disabled={photoUploading || loading || !formData.email}
-                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm shadow-sm hover:shadow cursor-pointer"
                       >
                         {photoUploading ? (
                           <>
@@ -908,7 +984,7 @@ const ProviderSignupPage: React.FC = () => {
                       )}
 
                       {formData.photoLink && (
-                        <div className="flex items-center justify-center gap-1 text-green-600 text-xs mt-2">
+                        <div className="flex items-center justify-center gap-1 text-emerald-600 text-xs mt-2">
                           <CheckCircle className="w-3 h-3" />
                           {lang === "en"
                             ? "Photo uploaded successfully"
@@ -935,7 +1011,7 @@ const ProviderSignupPage: React.FC = () => {
                       onChange={handleChange}
                       required
                       disabled={loading}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text"
                     />
                   </div>
 
@@ -957,7 +1033,7 @@ const ProviderSignupPage: React.FC = () => {
                       onChange={handleChange}
                       required
                       disabled={loading}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text"
                     />
                   </div>
 
@@ -981,13 +1057,13 @@ const ProviderSignupPage: React.FC = () => {
                           onChange={handleChange}
                           required
                           disabled={otpSent || loading}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text"
                         />
                         <button
                           type="button"
                           onClick={handleSendOTP}
                           disabled={loading || !formData.email || otpSent}
-                          className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition text-sm font-medium whitespace-nowrap"
+                          className="px-3 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-sm font-medium whitespace-nowrap shadow-sm hover:shadow cursor-pointer"
                         >
                           {loading
                             ? lang === "en"
@@ -995,8 +1071,8 @@ const ProviderSignupPage: React.FC = () => {
                               : "அனுப்புகிறது..."
                             : otpSent
                             ? lang === "en"
-                              ? "Sent"
-                              : "அனுப்பப்பட்டது"
+                              ? "Sent ✓"
+                              : "அனுப்பப்பட்டது ✓"
                             : lang === "en"
                             ? "Send OTP"
                             : "OTP அனுப்பவும்"}
@@ -1023,7 +1099,7 @@ const ProviderSignupPage: React.FC = () => {
                             }
                             maxLength={6}
                             disabled={otpVerified || loading}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100 text-center font-mono"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text text-center font-mono"
                           />
                           <button
                             type="button"
@@ -1031,7 +1107,7 @@ const ProviderSignupPage: React.FC = () => {
                             disabled={
                               loading || otpVerified || otp.length !== 6
                             }
-                            className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition text-sm font-medium whitespace-nowrap"
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-sm font-medium whitespace-nowrap shadow-sm hover:shadow cursor-pointer"
                           >
                             {otpVerified
                               ? lang === "en"
@@ -1049,7 +1125,7 @@ const ProviderSignupPage: React.FC = () => {
                               type="button"
                               onClick={handleResendOTP}
                               disabled={loading}
-                              className="text-blue-500 hover:text-blue-700 text-xs disabled:text-gray-400 transition underline"
+                              className="text-green-600 hover:text-green-700 active:text-green-800 text-xs disabled:text-gray-400 transition-all duration-200 underline hover:no-underline cursor-pointer hover:scale-105 active:scale-95"
                             >
                               {lang === "en"
                                 ? "Resend OTP"
@@ -1080,13 +1156,15 @@ const ProviderSignupPage: React.FC = () => {
                         required
                         minLength={6}
                         disabled={loading}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100 pr-10"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text pr-10"
                       />
+                      {/* Eye Icon with hover hand cursor */}
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         disabled={loading}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-blue-600 transition disabled:text-gray-400"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 disabled:text-gray-400 disabled:hover:bg-transparent active:bg-green-100 active:scale-95 cursor-pointer"
+                        title={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? (
                           <EyeOff size={16} />
@@ -1118,15 +1196,21 @@ const ProviderSignupPage: React.FC = () => {
                         onChange={handleChange}
                         required
                         disabled={loading}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100 pr-10"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text pr-10"
                       />
+                      {/* Eye Icon with hover hand cursor */}
                       <button
                         type="button"
                         onClick={() =>
                           setShowConfirmPassword(!showConfirmPassword)
                         }
                         disabled={loading}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-blue-600 transition disabled:text-gray-400"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 disabled:text-gray-400 disabled:hover:bg-transparent active:bg-green-100 active:scale-95 cursor-pointer"
+                        title={
+                          showConfirmPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
                       >
                         {showConfirmPassword ? (
                           <EyeOff size={16} />
@@ -1149,13 +1233,13 @@ const ProviderSignupPage: React.FC = () => {
                           !loading &&
                           setShowServiceDropdown(!showServiceDropdown)
                         }
-                        className={`w-full px-3 py-2 border rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
+                        className={`w-full px-3 py-2 border rounded-lg flex items-center justify-between transition-all duration-200 ${
                           loading
                             ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-white hover:border-blue-500 focus:border-blue-500"
+                            : "bg-white hover:border-green-500 focus:border-green-500 cursor-pointer"
                         } ${
                           showServiceDropdown
-                            ? "border-blue-500 ring-1 ring-blue-500"
+                            ? "border-green-500 ring-2 ring-green-500"
                             : "border-gray-300"
                         }`}
                       >
@@ -1184,7 +1268,7 @@ const ProviderSignupPage: React.FC = () => {
                                   serviceType: "",
                                 }));
                               }}
-                              className="p-0.5 hover:bg-gray-100 rounded"
+                              className="p-0.5 hover:bg-gray-100 rounded cursor-pointer"
                             >
                               <X className="w-3 h-3 text-gray-500" />
                             </button>
@@ -1215,7 +1299,7 @@ const ProviderSignupPage: React.FC = () => {
                                     ? "Search services..."
                                     : "சேவைகளைத் தேடுங்கள்..."
                                 }
-                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm hover:border-green-400 cursor-text"
                                 autoFocus
                               />
                             </div>
@@ -1242,9 +1326,9 @@ const ProviderSignupPage: React.FC = () => {
                                       setShowServiceDropdown(false);
                                       setServiceSearch("");
                                     }}
-                                    className={`px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${
+                                    className={`px-3 py-2.5 hover:bg-green-50 transition-colors cursor-pointer ${
                                       formData.serviceType === service.value
-                                        ? "bg-blue-50 text-blue-700 font-medium"
+                                        ? "bg-green-50 text-green-700 font-medium"
                                         : "text-gray-700"
                                     }`}
                                   >
@@ -1281,7 +1365,7 @@ const ProviderSignupPage: React.FC = () => {
                       onChange={handleChange}
                       required
                       disabled={loading}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-pointer"
                     >
                       <option value="">
                         {lang === "en"
@@ -1313,21 +1397,21 @@ const ProviderSignupPage: React.FC = () => {
                       onChange={handleChange}
                       required
                       disabled={loading}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition text-sm disabled:bg-gray-100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text"
                     />
                   </div>
 
-                  {/* Proof Document Upload - This stays at the bottom as before */}
+                  {/* Proof Document Upload */}
                   <div className="space-y-2">
                     <label className="block text-xs font-medium text-gray-700">
                       {lang === "en" ? "Proof Document" : "ஆவண சான்று"} *
                     </label>
 
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-green-400 transition-all duration-200">
                       {formData.proofLink ? (
                         <div className="space-y-3">
-                          <div className="flex items-center justify-center gap-3 p-3 bg-blue-50 rounded-lg">
-                            <FileCheck className="w-10 h-10 text-blue-500" />
+                          <div className="flex items-center justify-center gap-3 p-3 bg-green-50 rounded-lg">
+                            <FileCheck className="w-10 h-10 text-green-500" />
                             <div className="text-left">
                               <p className="text-sm font-medium text-gray-700">
                                 {lang === "en"
@@ -1338,7 +1422,7 @@ const ProviderSignupPage: React.FC = () => {
                                 href={formData.proofLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline"
+                                className="text-xs text-green-600 hover:text-green-700 hover:underline transition-all duration-200 cursor-pointer"
                               >
                                 {lang === "en"
                                   ? "View Document"
@@ -1353,7 +1437,7 @@ const ProviderSignupPage: React.FC = () => {
                               disabled={
                                 proofUploading || loading || !formData.email
                               }
-                              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+                              className="px-3 py-1.5 text-sm bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm hover:shadow cursor-pointer"
                             >
                               {proofUploading ? (
                                 <>
@@ -1375,12 +1459,12 @@ const ProviderSignupPage: React.FC = () => {
                               type="button"
                               onClick={removeProof}
                               disabled={proofUploading || loading}
-                              className="px-3 py-1.5 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
+                              className="px-3 py-1.5 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shadow-sm hover:shadow cursor-pointer"
                             >
                               {lang === "en" ? "Remove" : "நீக்கு"}
                             </button>
                           </div>
-                          <div className="flex items-center justify-center gap-1 text-green-600 text-xs">
+                          <div className="flex items-center justify-center gap-1 text-emerald-600 text-xs">
                             <CheckCircle className="w-3 h-3" />
                             {lang === "en"
                               ? "Document uploaded"
@@ -1403,7 +1487,7 @@ const ProviderSignupPage: React.FC = () => {
                             disabled={
                               proofUploading || loading || !formData.email
                             }
-                            className="mx-auto px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="mx-auto px-4 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow cursor-pointer"
                           >
                             {proofUploading ? (
                               <>
@@ -1450,7 +1534,7 @@ const ProviderSignupPage: React.FC = () => {
                       id="terms"
                       required
                       disabled={loading}
-                      className="mt-0.5 rounded focus:ring-blue-400 disabled:cursor-not-allowed"
+                      className="mt-0.5 rounded focus:ring-green-400 focus:ring-2 disabled:cursor-not-allowed cursor-pointer"
                     />
                     <label htmlFor="terms" className="text-xs text-gray-600">
                       {lang === "en"
@@ -1468,7 +1552,7 @@ const ProviderSignupPage: React.FC = () => {
                       !formData.photoLink ||
                       !formData.proofLink
                     }
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-lg transition duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm mt-2"
+                    className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm mt-2 shadow-md hover:shadow-lg cursor-pointer"
                   >
                     {loading
                       ? lang === "en"
@@ -1477,6 +1561,17 @@ const ProviderSignupPage: React.FC = () => {
                       : lang === "en"
                       ? "Complete Registration"
                       : "பதிவை முடிக்கவும்"}
+                  </button>
+
+                  {/* Back to Home Button */}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/")}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 active:from-green-300 active:to-emerald-300 text-green-700 border border-green-200 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:border-green-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow cursor-pointer group"
+                  >
+                    <Home className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                    {lang === "en" ? "Back to Home" : "முகப்புக்குத் திரும்பு"}
                   </button>
                 </form>
 
@@ -1490,7 +1585,7 @@ const ProviderSignupPage: React.FC = () => {
                       type="button"
                       onClick={() => !loading && router.push("/provider/login")}
                       disabled={loading}
-                      className="text-blue-500 hover:text-blue-700 font-medium underline disabled:text-gray-500"
+                      className="text-green-600 hover:text-green-700 active:text-green-800 font-medium underline hover:no-underline disabled:text-gray-500 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                     >
                       {lang === "en" ? "Login here" : "இங்கே உள்நுழையவும்"}
                     </button>
