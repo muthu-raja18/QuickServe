@@ -1,6 +1,7 @@
 import "./globals.css";
-import "@fontsource/inter";
-import "@fontsource/noto-sans-tamil";
+import { Inter } from "next/font/google";
+import { Noto_Sans_Tamil } from "next/font/google";
+
 import RootClient from "./RootClient";
 
 export const metadata = {
