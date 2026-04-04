@@ -54,6 +54,7 @@ import {
   ChevronLeft,
   ThumbsUp,
   Quote,
+  DollarSign,
 } from "lucide-react";
 
 // Types
@@ -63,7 +64,7 @@ interface Provider {
   email: string;
   serviceType: string;
   district: string;
-  block: string; // Added block field
+  block: string;
   rating: number;
   completedJobs: number;
   availability: boolean;
@@ -74,7 +75,9 @@ interface Provider {
   _ratingRefreshKey?: number;
   availabilitySettings?: AvailabilityData;
   hasActiveRequest?: boolean;
-  reviews?: Review[]; // Added reviews field
+  reviews?: Review[];
+  description?: string;
+  pricing?: string;
 }
 
 interface Review {
@@ -109,7 +112,7 @@ interface AvailabilityData {
   maxJobsPerDay?: number;
 }
 
-// ✅ Convert 24-hour to 12-hour format
+// Convert 24-hour to 12-hour format
 const convertTo12Hour = (time24: string): string => {
   try {
     const [hours, minutes] = time24.split(":").map(Number);
@@ -133,7 +136,6 @@ const SERVICE_TYPES = [
   { en: "Home Repair", ta: "வீடு பழுது", value: "home_repair" },
   { en: "Furniture Repair", ta: "தட்டு பழுது", value: "furniture_repair" },
   { en: "Waterproofing", ta: "நீர்புகா வேலை", value: "waterproofing" },
-
   // Cleaning Services
   { en: "Home Cleaning", ta: "வீட்டு சுத்தம்", value: "home_cleaning" },
   { en: "Deep Cleaning", ta: "ஆழமான சுத்தம்", value: "deep_cleaning" },
@@ -149,8 +151,7 @@ const SERVICE_TYPES = [
     ta: "தொட்டி & கழிவுநீர் சுத்தம்",
     value: "tank_drain_cleaning",
   },
-
-  // Appliance Repair (General & Specialized)
+  // Appliance Repair
   {
     en: "Appliance Repair",
     ta: "பயன்பாட்டு சாதன பழுது",
@@ -179,8 +180,7 @@ const SERVICE_TYPES = [
     ta: "நீர் சுத்திகரிப்பான் சேவைகள்",
     value: "water_purifier_services",
   },
-
-  // Vehicle Services (General & Specialized)
+  // Vehicle Services
   { en: "Mechanic", ta: "மெக்கானிக்", value: "mechanic" },
   { en: "Car Mechanic", ta: "கார் மெக்கானிக்", value: "car_mechanic" },
   { en: "Bike Mechanic", ta: "பைக் மெக்கானிக்", value: "bike_mechanic" },
@@ -192,7 +192,6 @@ const SERVICE_TYPES = [
     value: "vehicle_painting",
   },
   { en: "Car AC Repair", ta: "கார் ஏசி பழுது", value: "car_ac_repair" },
-
   // Beauty & Wellness
   { en: "Hair Stylist", ta: "முடி அலங்காரம்", value: "hair_stylist" },
   { en: "Beautician", ta: "அழகு சாதனம்", value: "beautician" },
@@ -200,7 +199,6 @@ const SERVICE_TYPES = [
   { en: "Massage Therapy", ta: "மசாஜ் சிகிச்சை", value: "massage_therapy" },
   { en: "Spa Services", ta: "ஸ்பா சேவைகள்", value: "spa_services" },
   { en: "Nail Art", ta: "நக கலை", value: "nail_art" },
-
   // Education & Tutoring
   { en: "Tutoring", ta: "பயிற்சி", value: "tutoring" },
   { en: "Math Tutor", ta: "கணித பயிற்றுவிப்பாளர்", value: "math_tutor" },
@@ -226,7 +224,6 @@ const SERVICE_TYPES = [
     ta: "உடற்பயிற்சி பயிற்றுவிப்பாளர்",
     value: "fitness_trainer",
   },
-
   // IT & Electronics
   { en: "Computer Services", ta: "கணினி சேவைகள்", value: "computer_services" },
   { en: "Computer Repair", ta: "கணினி பழுது", value: "computer_repair" },
@@ -248,7 +245,6 @@ const SERVICE_TYPES = [
     ta: "மென்பொருள் நிறுவுதல்",
     value: "software_installation",
   },
-
   // Pest Control & Gardening
   { en: "Pest Control", ta: "பூச்சி கட்டுப்பாடு", value: "pest_control" },
   {
@@ -264,7 +260,6 @@ const SERVICE_TYPES = [
     value: "lawn_maintenance",
   },
   { en: "Tree Services", ta: "மர சேவைகள்", value: "tree_services" },
-
   // Event Services
   { en: "Photographer", ta: "புகைப்படக் கலைஞர்", value: "photographer" },
   { en: "Videographer", ta: "காணொளி கலைஞர்", value: "videographer" },
@@ -280,7 +275,6 @@ const SERVICE_TYPES = [
     ta: "திருமண திட்டமிடுபவர்",
     value: "wedding_planner",
   },
-
   // Professional Services
   { en: "Legal Services", ta: "சட்ட சேவைகள்", value: "legal_services" },
   { en: "Accountant", ta: "கணக்காளர்", value: "accountant" },
@@ -292,7 +286,6 @@ const SERVICE_TYPES = [
   },
   { en: "Architect", ta: "கட்டடக் கலைஞர்", value: "architect" },
   { en: "Tailor", ta: "தையல்காரர்", value: "tailor" },
-
   // Delivery & Transportation
   { en: "Packing & Moving", ta: "பேக்கிங் & நகரும்", value: "packing_moving" },
   { en: "Goods Delivery", ta: "பொருட்கள் விநியோகம்", value: "goods_delivery" },
@@ -302,7 +295,6 @@ const SERVICE_TYPES = [
     value: "transport_services",
   },
   { en: "Driver Services", ta: "டிரைவர் சேவைகள்", value: "driver_services" },
-
   // Healthcare Services
   { en: "Nursing Care", ta: "சிகிச்சை பராமரிப்பு", value: "nursing_care" },
   { en: "Elderly Care", ta: "மூப்போர் பராமரிப்பு", value: "elderly_care" },
@@ -313,7 +305,6 @@ const SERVICE_TYPES = [
     value: "physiotherapist",
   },
   { en: "Home Nurse", ta: "வீட்டுச் செவிலியர்", value: "home_nurse" },
-
   // Miscellaneous Services
   { en: "Salon at Home", ta: "வீட்டில் சலூன்", value: "salon_at_home" },
   { en: "Pet Care", ta: "செல்லப்பிராணி பராமரிப்பு", value: "pet_care" },
@@ -339,15 +330,8 @@ const SERVICE_TYPES = [
     value: "gas_stove_repair",
   },
   { en: "Chimney Cleaning", ta: "சிம்னி சுத்தம்", value: "chimney_cleaning" },
-
   // Other
   { en: "Other Services", ta: "மற்ற சேவைகள்", value: "other_services" },
-];
-
-const URGENCY_OPTIONS = [
-  { en: "1 hour", ta: "1 மணி நேரம்", value: "1h" },
-  { en: "2 hours", ta: "2 மணி நேரம்", value: "2h" },
-  { en: "1 day", ta: "1 நாள்", value: "1d" },
 ];
 
 const DISTRICTS_TAMIL_NADU = [
@@ -418,14 +402,12 @@ const StarRating = ({
     md: "w-4 h-4",
     lg: "w-5 h-5",
   }[size];
-
   const textSize = {
     xs: "text-xs",
     sm: "text-xs",
     md: "text-sm",
     lg: "text-base",
   }[size];
-
   return (
     <div className="flex items-center gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
@@ -435,8 +417,8 @@ const StarRating = ({
             star <= Math.floor(rating)
               ? "text-yellow-500 fill-yellow-500"
               : star <= rating
-              ? "text-yellow-300 fill-yellow-300"
-              : "text-gray-300"
+                ? "text-yellow-300 fill-yellow-300"
+                : "text-gray-300"
           }`}
         />
       ))}
@@ -456,27 +438,24 @@ const StarRating = ({
 
 // Provider Card Skeleton
 const ProviderCardSkeleton = () => (
-  <div className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse min-h-[360px] flex flex-col">
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-gray-200 rounded-full" />
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-200 rounded w-28" />
-          <div className="h-3 bg-gray-100 rounded w-24" />
-        </div>
+  <div className="bg-white rounded-xl border border-gray-200 p-4 animate-pulse min-h-[260px] flex flex-col">
+    <div className="flex items-start gap-3 mb-3">
+      <div className="w-12 h-12 bg-gray-200 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <div className="h-5 bg-gray-200 rounded w-28" />
+        <div className="h-4 bg-gray-100 rounded w-24" />
       </div>
-      <div className="h-6 bg-gray-200 rounded-full w-20" />
     </div>
-    <div className="space-y-3 mb-4 flex-grow">
-      <div className="h-4 bg-gray-200 rounded w-32" />
-      <div className="flex items-center gap-2">
-        <div className="h-3 bg-gray-100 rounded w-4" />
-        <div className="h-3 bg-gray-100 rounded w-24" />
+    <div className="h-8 bg-gray-100 rounded-lg mb-3" />
+    <div className="h-4 bg-gray-100 rounded w-32 mb-2" />
+    <div className="h-8 bg-gray-100 rounded-lg mb-3" />
+    <div className="mt-auto pt-3 border-t border-gray-100">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="h-8 bg-gray-100 rounded-lg" />
+        <div className="h-8 bg-gray-100 rounded-lg" />
       </div>
-      <div className="h-4 bg-gray-200 rounded w-36 mt-2" />
-      <div className="h-3 bg-gray-100 rounded w-40 mt-2" />
+      <div className="h-8 bg-gray-100 rounded-lg mt-2" />
     </div>
-    <div className="h-10 bg-gray-200 rounded-xl" />
   </div>
 );
 
@@ -533,7 +512,6 @@ const ReviewsModal = ({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
       >
-        {/* Modal Header */}
         <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-yellow-50">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
@@ -557,9 +535,7 @@ const ReviewsModal = ({
             </button>
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto p-5">
-          {/* Overall Rating Summary */}
           <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4 mb-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -591,20 +567,17 @@ const ReviewsModal = ({
                         ? "Currently available for new requests"
                         : "தற்போது புதிய கோரிக்கைகளுக்கு கிடைக்கும்"
                       : lang === "en"
-                      ? "Currently busy"
-                      : "தற்போது பிஸியாக"}
+                        ? "Currently busy"
+                        : "தற்போது பிஸியாக"}
                   </p>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Reviews List */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-800 mb-2">
               {lang === "en" ? "Recent Reviews" : "சமீபத்திய மதிப்பீடுகள்"}
             </h4>
-
             {provider.reviews && provider.reviews.length > 0 ? (
               provider.reviews.map((review, index) => (
                 <motion.div
@@ -637,7 +610,6 @@ const ReviewsModal = ({
                       </div>
                     </div>
                   </div>
-
                   {review.comment && (
                     <div className="bg-gray-50 p-3 rounded-lg mt-2">
                       <div className="flex items-start gap-2">
@@ -667,8 +639,6 @@ const ReviewsModal = ({
                 </p>
               </div>
             )}
-
-            {/* Reviews Stats */}
             {provider.reviews && provider.reviews.length > 0 && (
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-between">
@@ -686,8 +656,6 @@ const ReviewsModal = ({
             )}
           </div>
         </div>
-
-        {/* Close Button */}
         <div className="p-5 border-t border-gray-200">
           <button
             onClick={onClose}
@@ -701,7 +669,7 @@ const ReviewsModal = ({
   );
 };
 
-// Availability Details Modal
+// Enhanced Availability Details Modal (includes description, pricing)
 const AvailabilityDetailsModal = ({
   provider,
   isOpen,
@@ -714,7 +682,6 @@ const AvailabilityDetailsModal = ({
   lang: string;
 }) => {
   if (!isOpen || !provider.availabilitySettings) return null;
-
   const availability = provider.availabilitySettings;
 
   const formatWorkingDays = useCallback(() => {
@@ -727,7 +694,6 @@ const AvailabilityDetailsModal = ({
       Sat: { en: "Saturday", ta: "சனி" },
       Sun: { en: "Sunday", ta: "ஞாயிறு" },
     };
-
     return availability.workingDays
       .map((day) => daysMap[day]?.[lang as "en" | "ta"] || day)
       .join(", ");
@@ -748,18 +714,15 @@ const AvailabilityDetailsModal = ({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
       >
-        {/* Modal Header */}
         <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-xl">
-                <Clock className="w-5 h-5 text-blue-600" />
+                <Info className="w-5 h-5 text-blue-600" />
               </div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900">
-                  {lang === "en"
-                    ? "Availability Details"
-                    : "கிடைக்கும் விவரங்கள்"}
+                  {lang === "en" ? "Provider Details" : "வழங்குநர் விவரங்கள்"}
                 </h3>
                 <p className="text-sm text-gray-600">{provider.name}</p>
               </div>
@@ -772,9 +735,38 @@ const AvailabilityDetailsModal = ({
             </button>
           </div>
         </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Description */}
+          {provider.description && (
+            <div>
+              <h4 className="font-semibold text-gray-800 flex items-center gap-2 mb-2">
+                <Info className="w-4 h-4 text-blue-500" />
+                {lang === "en" ? "About Me" : "என்னைப் பற்றி"}
+              </h4>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+                  {provider.description}
+                </p>
+              </div>
+            </div>
+          )}
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Availability Status Card */}
+          {/* Pricing */}
+          {provider.pricing && (
+            <div>
+              <h4 className="font-semibold text-gray-800 flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-green-600" />
+                {lang === "en" ? "Pricing" : "விலை"}
+              </h4>
+              <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                <p className="text-gray-700 whitespace-pre-wrap text-sm">
+                  {provider.pricing}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Availability Status */}
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -794,8 +786,8 @@ const AvailabilityDetailsModal = ({
                         ? "Currently Available"
                         : "தற்போது கிடைக்கும்"
                       : lang === "en"
-                      ? "Currently Busy"
-                      : "தற்போது பிஸியாக"}
+                        ? "Currently Busy"
+                        : "தற்போது பிஸியாக"}
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     {availability.isAvailable
@@ -803,15 +795,15 @@ const AvailabilityDetailsModal = ({
                         ? "Accepting new requests now"
                         : "புதிய கோரிக்கைகளை இப்போது ஏற்கும்"
                       : lang === "en"
-                      ? "Not accepting requests at this time"
-                      : "இந்த நேரத்தில் கோரிக்கைகளை ஏற்காது"}
+                        ? "Not accepting requests at this time"
+                        : "இந்த நேரத்தில் கோரிக்கைகளை ஏற்காது"}
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Working Hours Card */}
+          {/* Working Hours */}
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-4 h-4 text-blue-600" />
@@ -839,7 +831,7 @@ const AvailabilityDetailsModal = ({
             </div>
           </div>
 
-          {/* Working Days Card */}
+          {/* Working Days */}
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Calendar className="w-4 h-4 text-blue-600" />
@@ -854,7 +846,7 @@ const AvailabilityDetailsModal = ({
             </div>
           </div>
 
-          {/* Service Preferences Card */}
+          {/* Service Preferences */}
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Info className="w-4 h-4 text-blue-600" />
@@ -910,21 +902,19 @@ const AvailabilityDetailsModal = ({
                       ? "Available"
                       : "கிடைக்கும்"
                     : lang === "en"
-                    ? "Not Available"
-                    : "கிடைக்காது"}
+                      ? "Not Available"
+                      : "கிடைக்காது"}
                 </p>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Close Button */}
         <div className="p-5 border-t border-gray-200">
           <button
             onClick={onClose}
             className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium text-sm transition-all shadow-sm hover:shadow"
           >
-            {lang === "en" ? "Close Details" : "விவரங்களை மூடு"}
+            {lang === "en" ? "Close" : "மூடு"}
           </button>
         </div>
       </motion.div>
@@ -932,18 +922,15 @@ const AvailabilityDetailsModal = ({
   );
 };
 
-// Optimized function to calculate provider rating
+// Helper functions (unchanged)
 const calculateProviderRatingFromJobs = async (
-  providerId: string
+  providerId: string,
 ): Promise<{ rating: number; completedJobs: number; totalReviews: number }> => {
   try {
     const providerRef = doc(db, "providers", providerId);
     const providerDoc = await getDoc(providerRef);
-
     if (providerDoc.exists()) {
       const providerData = providerDoc.data();
-
-      // Try to get from existing data first (faster)
       if (providerData.averageRating !== undefined) {
         return {
           rating: parseFloat((providerData.averageRating || 0).toFixed(1)),
@@ -951,39 +938,26 @@ const calculateProviderRatingFromJobs = async (
           totalReviews: providerData.totalReviews || 0,
         };
       }
-
-      // Fallback to job calculation
       const requestsRef = collection(db, "serviceRequests");
       const q = query(
         requestsRef,
         where("providerId", "==", providerId),
         where("status", "==", "completed"),
         where("seekerRating", ">", 0),
-        limit(100)
+        limit(100),
       );
-
       const snapshot = await getDocs(q);
-      const jobs = snapshot.docs.map((doc) => ({
-        rating: doc.data().seekerRating || 0,
-      }));
-
-      const completedJobs = snapshot.size;
-      const ratedJobs = jobs.filter((job) => job.rating > 0);
-      const totalReviews = ratedJobs.length;
-
-      let averageRating = 0;
-      if (ratedJobs.length > 0) {
-        const totalRating = ratedJobs.reduce((sum, job) => sum + job.rating, 0);
-        averageRating = totalRating / ratedJobs.length;
-      }
-
+      let totalRating = 0;
+      snapshot.docs.forEach((doc) => {
+        totalRating += doc.data().seekerRating || 0;
+      });
+      const averageRating = snapshot.size > 0 ? totalRating / snapshot.size : 0;
       return {
         rating: parseFloat(averageRating.toFixed(1)),
-        completedJobs,
-        totalReviews,
+        completedJobs: snapshot.size,
+        totalReviews: snapshot.size,
       };
     }
-
     return { rating: 0, completedJobs: 0, totalReviews: 0 };
   } catch (error) {
     console.error("Error calculating provider rating:", error);
@@ -991,7 +965,6 @@ const calculateProviderRatingFromJobs = async (
   }
 };
 
-// Function to load provider reviews
 const loadProviderReviews = async (providerId: string): Promise<Review[]> => {
   try {
     const requestsRef = collection(db, "serviceRequests");
@@ -1000,12 +973,10 @@ const loadProviderReviews = async (providerId: string): Promise<Review[]> => {
       where("providerId", "==", providerId),
       where("status", "==", "completed"),
       where("seekerRating", ">", 0),
-      limit(20) // Limit to recent 20 reviews for performance
+      limit(20),
     );
-
     const snapshot = await getDocs(q);
     const reviews: Review[] = [];
-
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
       if (data.seekerRating && data.seekerRating > 0) {
@@ -1023,8 +994,6 @@ const loadProviderReviews = async (providerId: string): Promise<Review[]> => {
         });
       }
     });
-
-    // Sort by date (newest first)
     reviews.sort((a, b) => {
       const dateA =
         a.createdAt instanceof Date
@@ -1036,7 +1005,6 @@ const loadProviderReviews = async (providerId: string): Promise<Review[]> => {
           : (b.createdAt as Timestamp).toDate();
       return dateB.getTime() - dateA.getTime();
     });
-
     return reviews;
   } catch (error) {
     console.error("Error loading provider reviews:", error);
@@ -1044,20 +1012,16 @@ const loadProviderReviews = async (providerId: string): Promise<Review[]> => {
   }
 };
 
-// Optimized function to load provider availability
 const loadProviderAvailability = async (
-  providerId: string
+  providerId: string,
 ): Promise<AvailabilityData> => {
   try {
     const providerRef = doc(db, "providers", providerId);
     const providerDoc = await getDoc(providerRef);
-
     if (providerDoc.exists()) {
       const providerData = providerDoc.data();
-
       if (providerData.availabilitySettings) {
         const settings = providerData.availabilitySettings;
-
         return {
           isAvailable:
             settings.isAvailable !== undefined ? settings.isAvailable : true,
@@ -1083,11 +1047,8 @@ const loadProviderAvailability = async (
           maxJobsPerDay: settings.maxJobsPerDay || 3,
         };
       }
-
-      const isAvailable = providerData.availability !== false;
-
       return {
-        isAvailable,
+        isAvailable: providerData.availability !== false,
         workingHours: { start: "09:00", end: "18:00" },
         workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
         breakTime: { start: "13:00", end: "14:00" },
@@ -1100,7 +1061,6 @@ const loadProviderAvailability = async (
   } catch (error) {
     console.error(`Error loading availability:`, error);
   }
-
   return {
     isAvailable: true,
     workingHours: { start: "09:00", end: "18:00" },
@@ -1113,13 +1073,11 @@ const loadProviderAvailability = async (
   };
 };
 
-// Function to check if user has active request with provider
 const checkIfHasActiveRequest = async (
   seekerId: string,
-  providerId: string
+  providerId: string,
 ): Promise<boolean> => {
   if (!seekerId || !providerId) return false;
-
   try {
     const requestsRef = collection(db, "serviceRequests");
     const q = query(
@@ -1131,9 +1089,8 @@ const checkIfHasActiveRequest = async (
         "accepted",
         "in_progress",
         "awaiting_confirmation",
-      ])
+      ]),
     );
-
     const snapshot = await getDocs(q);
     return !snapshot.empty;
   } catch (error) {
@@ -1147,7 +1104,6 @@ export default function HomeSection() {
   const { lang } = useLanguage();
   const { user, userData } = useAuth();
 
-  // State
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAddress, setLoadingAddress] = useState(true);
@@ -1156,105 +1112,70 @@ export default function HomeSection() {
   const [availabilityModalProvider, setAvailabilityModalProvider] =
     useState<Provider | null>(null);
   const [reviewsModalProvider, setReviewsModalProvider] =
-    useState<Provider | null>(null); // Added reviews modal state
+    useState<Provider | null>(null);
 
-  // Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [minRating, setMinRating] = useState(0);
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(true);
 
-  // Service search dropdown state
   const [serviceSearch, setServiceSearch] = useState("");
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [filteredServices, setFilteredServices] = useState(SERVICE_TYPES);
   const serviceDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Request modal state
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
-    null
+    null,
   );
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [serviceDescription, setServiceDescription] = useState("");
-  const [urgency, setUrgency] = useState("2h");
+  const [urgencyHours, setUrgencyHours] = useState(2);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
-  // Debug effect to check availability
   useEffect(() => {
-    if (providers.length > 0) {
-      console.log("=== AVAILABILITY DEBUG ===");
-      console.log(`Total providers: ${providers.length}`);
-      console.log(`Show only available: ${showOnlyAvailable}`);
-
-      const availableCount = providers.filter(
-        (p) => p.availability === true
-      ).length;
-      console.log(`Actually available: ${availableCount}`);
-    }
-  }, [providers, showOnlyAvailable]);
-
-  // Listen for rating updates
-  useEffect(() => {
-    const handleRatingUpdate = () => {
-      setRefreshKey((prev) => prev + 1);
-    };
-
-    window.addEventListener("rating-updated", handleRatingUpdate);
-    return () =>
-      window.removeEventListener("rating-updated", handleRatingUpdate);
-  }, []);
-
-  // Filter services based on search
-  useEffect(() => {
-    if (serviceSearch.trim() === "") {
-      setFilteredServices(SERVICE_TYPES);
-    } else {
-      const query = serviceSearch.toLowerCase();
-      const filtered = SERVICE_TYPES.filter(
-        (service) =>
-          service.en.toLowerCase().includes(query) ||
-          service.ta.includes(query) ||
-          service.value.toLowerCase().includes(query)
+    if (serviceSearch.trim() === "") setFilteredServices(SERVICE_TYPES);
+    else {
+      const q = serviceSearch.toLowerCase();
+      setFilteredServices(
+        SERVICE_TYPES.filter(
+          (s) =>
+            s.en.toLowerCase().includes(q) ||
+            s.ta.includes(q) ||
+            s.value.toLowerCase().includes(q),
+        ),
       );
-      setFilteredServices(filtered);
     }
   }, [serviceSearch]);
 
-  // Close service dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         serviceDropdownRef.current &&
         !serviceDropdownRef.current.contains(event.target as Node)
-      ) {
+      )
         setShowServiceDropdown(false);
-      }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Load seeker address
   useEffect(() => {
     if (!user?.uid) {
       setLoadingAddress(false);
       return;
     }
-
     const loadAddress = async () => {
       try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
           const data = userDoc.data();
           if (data?.address?.district) {
-            const address = {
+            setSeekerAddress({
               district: data.address.district,
               block: data.address.block || "",
               fullAddress: data.address.fullAddress,
-            };
-            setSeekerAddress(address);
+            });
             setSelectedDistrict(data.address.district);
           }
         }
@@ -1264,64 +1185,49 @@ export default function HomeSection() {
         setLoadingAddress(false);
       }
     };
-
     loadAddress();
   }, [user?.uid]);
 
-  // Load providers with ratings, availability, and reviews
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
       return;
     }
-
     setLoading(true);
-
     const providersRef = collection(db, "providers");
     const q = query(providersRef, where("status", "==", "approved"), limit(50));
-
     const unsubscribe = onSnapshot(
       q,
       async (snapshot) => {
         try {
           const providersData: Provider[] = [];
-
-          // Process providers in batches for better performance
           const batchSize = 8;
           for (let i = 0; i < snapshot.docs.length; i += batchSize) {
             const batch = snapshot.docs.slice(i, i + batchSize);
-
-            const batchPromises = batch.map(async (doc) => {
-              const providerData = doc.data();
-              const providerId = doc.id;
-
-              // Check if user has active request with this provider
+            const batchPromises = batch.map(async (docSnap) => {
+              const providerData = docSnap.data();
+              const providerId = docSnap.id;
               const hasActiveRequest = await checkIfHasActiveRequest(
                 user.uid,
-                providerId
+                providerId,
               );
-
-              // Calculate rating, reviews, and availability in parallel
               const [calculatedRating, reviews, availabilitySettings] =
                 await Promise.all([
                   calculateProviderRatingFromJobs(providerId),
                   loadProviderReviews(providerId),
                   loadProviderAvailability(providerId),
                 ]);
-
-              // Set availability correctly
               const providerAvailability =
                 providerData.availability !== undefined
                   ? providerData.availability === true
                   : availabilitySettings.isAvailable;
-
               return {
                 id: providerId,
                 name: providerData.name || "",
                 email: providerData.email || "",
                 serviceType: providerData.serviceType || "",
                 district: providerData.district || "",
-                block: providerData.block || "", // Added block field
+                block: providerData.block || "",
                 rating: calculatedRating.rating,
                 completedJobs: calculatedRating.completedJobs,
                 availability: providerAvailability,
@@ -1332,14 +1238,13 @@ export default function HomeSection() {
                 _ratingRefreshKey: refreshKey,
                 availabilitySettings,
                 hasActiveRequest,
-                reviews, // Added reviews
+                reviews,
+                description: providerData.description || "",
+                pricing: providerData.pricing || "",
               } as Provider;
             });
-
-            const batchResults = await Promise.all(batchPromises);
-            providersData.push(...batchResults);
+            providersData.push(...(await Promise.all(batchPromises)));
           }
-
           providersData.sort((a, b) => b.rating - a.rating);
           setProviders(providersData);
           setLoading(false);
@@ -1351,37 +1256,23 @@ export default function HomeSection() {
       (error) => {
         console.error("Error in provider subscription:", error);
         setLoading(false);
-      }
+      },
     );
-
     return () => unsubscribe();
   }, [user?.uid, refreshKey]);
 
-  // Function to refresh all providers
   const refreshAllProviders = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
 
-  // Filter providers - UPDATED to include block search
   const filteredProviders = useMemo(() => {
     let list = [...providers];
-
-    if (selectedDistrict) {
+    if (selectedDistrict)
       list = list.filter((p) => p.district === selectedDistrict);
-    }
-
-    if (selectedService) {
+    if (selectedService)
       list = list.filter((p) => p.serviceType === selectedService);
-    }
-
-    if (minRating > 0) {
-      list = list.filter((p) => p.rating >= minRating);
-    }
-
-    if (showOnlyAvailable) {
-      list = list.filter((p) => p.availability === true);
-    }
-
+    if (minRating > 0) list = list.filter((p) => p.rating >= minRating);
+    if (showOnlyAvailable) list = list.filter((p) => p.availability === true);
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       list = list.filter(
@@ -1389,15 +1280,14 @@ export default function HomeSection() {
           p.name.toLowerCase().includes(query) ||
           p.serviceType.toLowerCase().includes(query) ||
           p.district.toLowerCase().includes(query) ||
-          p.block.toLowerCase().includes(query) || // Added block search
+          p.block.toLowerCase().includes(query) ||
           SERVICE_TYPES.find(
             (s) =>
               s.value === p.serviceType &&
-              (s.en.toLowerCase().includes(query) || s.ta.includes(query))
-          )
+              (s.en.toLowerCase().includes(query) || s.ta.includes(query)),
+          ),
       );
     }
-
     return list;
   }, [
     providers,
@@ -1408,60 +1298,44 @@ export default function HomeSection() {
     searchQuery,
   ]);
 
-  // Send request handler (with duplicate request prevention)
   const handleSendRequest = async () => {
     if (!selectedProvider || !user || !seekerAddress?.district) {
       alert(
         lang === "en"
           ? "Missing required information"
-          : "தேவையான தகவல்கள் காணவில்லை"
+          : "தேவையான தகவல்கள் காணவில்லை",
       );
       return;
     }
-
-    // Check if user already has active request with this provider
     if (selectedProvider.hasActiveRequest) {
       alert(
         lang === "en"
-          ? "You already have an active request with this provider. Please wait for it to be completed or cancelled."
-          : "உங்களிடம் ஏற்கனவே இந்த வழங்குநருடன் செயலில் உள்ள கோரிக்கை உள்ளது. அது முடிவடையும் வரை அல்லது ரத்து செய்யப்படும் வரை காத்திருக்கவும்."
+          ? "You already have an active request with this provider."
+          : "உங்களிடம் ஏற்கனவே இந்த வழங்குநருடன் செயலில் உள்ள கோரிக்கை உள்ளது.",
       );
       return;
     }
-
-    if (!serviceDescription.trim()) {
-      alert(
-        lang === "en"
-          ? "Please describe your service needs"
-          : "உங்கள் சேவை தேவைகளை விவரிக்கவும்"
-      );
-      return;
-    }
-
     setSubmittingRequest(true);
-
     try {
       const expiresAt = new Date();
-      if (urgency === "1h") expiresAt.setHours(expiresAt.getHours() + 1);
-      if (urgency === "2h") expiresAt.setHours(expiresAt.getHours() + 2);
-      if (urgency === "1d") expiresAt.setDate(expiresAt.getDate() + 1);
-
+      expiresAt.setHours(expiresAt.getHours() + urgencyHours);
       const seekerName =
         userData?.name ||
         user.displayName ||
         (lang === "en" ? "Seeker" : "தேடுபவர்");
-
-      const requestData = {
+      await addDoc(collection(db, "serviceRequests"), {
         seekerId: user.uid,
         seekerName,
         seekerEmail: user.email || "",
         providerId: selectedProvider.id,
         providerName: selectedProvider.name,
         serviceType: selectedProvider.serviceType,
-        description: serviceDescription.trim(),
+        description:
+          serviceDescription.trim() ||
+          (lang === "en" ? "Service request" : "சேவை கோரிக்கை"),
         district: seekerAddress.district,
         block: seekerAddress.block || "",
-        urgency,
+        urgency: `${urgencyHours}h`,
         status: "pending",
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAt),
@@ -1469,40 +1343,33 @@ export default function HomeSection() {
         exactAddress: null,
         addressShared: false,
         providerPhone: null,
-      };
-
-      await addDoc(collection(db, "serviceRequests"), requestData);
-
+      });
       alert(
         lang === "en"
           ? "✅ Request sent successfully!"
-          : "✅ கோரிக்கை வெற்றிகரமாக அனுப்பப்பட்டது!"
+          : "✅ கோரிக்கை வெற்றிகரமாக அனுப்பப்பட்டது!",
       );
-
       setShowRequestModal(false);
       setSelectedProvider(null);
       setServiceDescription("");
-      setUrgency("2h");
-
-      // Update provider's hasActiveRequest status locally
+      setUrgencyHours(2);
       setProviders((prev) =>
         prev.map((p) =>
-          p.id === selectedProvider.id ? { ...p, hasActiveRequest: true } : p
-        )
+          p.id === selectedProvider.id ? { ...p, hasActiveRequest: true } : p,
+        ),
       );
     } catch (err: any) {
       console.error("Error sending request:", err);
       alert(
         lang === "en"
           ? `Failed to send request: ${err.message}`
-          : `கோரிக்கை அனுப்ப முடியவில்லை: ${err.message}`
+          : `கோரிக்கை அனுப்ப முடியவில்லை: ${err.message}`,
       );
     } finally {
       setSubmittingRequest(false);
     }
   };
 
-  // Reset filters
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedService("");
@@ -1512,286 +1379,187 @@ export default function HomeSection() {
     setServiceSearch("");
   };
 
-  // Get district name in current language
   const getDistrictName = useCallback(
     (districtEn: string) => {
       const district = DISTRICTS_TAMIL_NADU.find((d) => d.en === districtEn);
       return lang === "en" ? districtEn : district?.ta || districtEn;
     },
-    [lang]
+    [lang],
   );
 
-  // Get service name in current language
   const getServiceName = useCallback(
     (serviceValue: string) => {
       const service = SERVICE_TYPES.find((s) => s.value === serviceValue);
       return service ? service[lang === "en" ? "en" : "ta"] : serviceValue;
     },
-    [lang]
+    [lang],
   );
 
-  // Format availability time in 12-hour format
   const formatAvailabilityTime = useCallback((provider: Provider) => {
     if (!provider.availabilitySettings) return "";
-
     const { workingHours } = provider.availabilitySettings;
-    return `${convertTo12Hour(workingHours.start)} - ${convertTo12Hour(
-      workingHours.end
-    )}`;
+    return `${convertTo12Hour(workingHours.start)} - ${convertTo12Hour(workingHours.end)}`;
   }, []);
 
-  // Handle availability details
-  const handleShowAvailabilityDetails = (provider: Provider) => {
-    setAvailabilityModalProvider(provider);
+  const getUrgencyText = (hours: number) => {
+    if (hours === 1) return lang === "en" ? "1 hour" : "1 மணி நேரம்";
+    return lang === "en" ? `${hours} hours` : `${hours} மணி நேரம்`;
   };
 
-  // Handle reviews details
-  const handleShowReviews = (provider: Provider) => {
-    setReviewsModalProvider(provider);
-  };
-
-  // Provider Card Component
+  // Compact Provider Card Component (with recent review preview)
   const ProviderCard = ({ provider }: { provider: Provider }) => {
     const canRequest =
       provider.availability &&
       seekerAddress?.district &&
       !provider.hasActiveRequest;
-
-    // Check if provider has reviews
-    const hasReviews = provider.reviews && provider.reviews.length > 0;
-    const recentReview = hasReviews ? provider.reviews![0] : null;
+    const recentReview =
+      provider.reviews && provider.reviews.length > 0
+        ? provider.reviews[0]
+        : null;
 
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 flex flex-col h-full">
-        {/* Provider Header */}
-        <div className="p-5 pb-3 flex-1">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              {/* Profile Photo */}
-              <div className="relative w-14 h-14 flex-shrink-0">
-                {provider.photoLink ? (
-                  <>
-                    <div className="w-full h-full rounded-full overflow-hidden border-3 border-white shadow-lg">
-                      <img
-                        src={provider.photoLink}
-                        alt={provider.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = "none";
-                          const parent = target.parentElement;
-                          if (parent) {
-                            const fallbackDiv = document.createElement("div");
-                            fallbackDiv.className =
-                              "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-lg";
-                            fallbackDiv.textContent = provider.name
-                              .charAt(0)
-                              .toUpperCase();
-                            parent.appendChild(fallbackDiv);
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center shadow-md">
-                      <Camera className="w-2.5 h-2.5 text-white" />
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                    {provider.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0 pt-1">
-                {/* Name */}
-                <h4 className="font-bold text-gray-900 text-base mb-1.5 line-clamp-1">
-                  {provider.name}
-                </h4>
-
-                {/* Badges */}
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full whitespace-nowrap min-w-[80px]">
-                    <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">
-                      {lang === "en" ? "Verified" : "சரிபார்க்கப்பட்டது"}
-                    </span>
+      <div className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 flex flex-col h-full overflow-hidden">
+        <div className="p-4 flex-1 flex flex-col">
+          {/* Header with photo and name */}
+          <div className="flex items-start gap-3 mb-3">
+            <div className="relative w-12 h-12 flex-shrink-0">
+              {provider.photoLink ? (
+                <img
+                  src={provider.photoLink}
+                  alt={provider.name}
+                  className="w-full h-full rounded-full object-cover border-2 border-white shadow-sm"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm">
+                  {provider.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-bold text-gray-900 text-base mb-1 line-clamp-1">
+                {provider.name}
+              </h4>
+              <div className="flex flex-wrap gap-1">
+                <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span className="truncate max-w-[60px]">
+                    {lang === "en" ? "Verified" : "சரிபார்க்கப்பட்டது"}
                   </span>
-                  <span
-                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full whitespace-nowrap min-w-[80px] ${
-                      provider.availability
-                        ? "bg-green-50 text-green-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0"></span>
-                    <span className="truncate">
-                      {provider.availability
-                        ? lang === "en"
-                          ? "Available"
-                          : "கிடைக்கும்"
-                        : lang === "en"
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                    provider.availability
+                      ? "bg-green-50 text-green-700"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                  <span className="truncate max-w-[60px]">
+                    {provider.availability
+                      ? lang === "en"
+                        ? "Available"
+                        : "கிடைக்கும்"
+                      : lang === "en"
                         ? "Busy"
                         : "பிஸியாக"}
-                    </span>
                   </span>
-                  {provider.hasActiveRequest && (
-                    <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full whitespace-nowrap min-w-[100px]">
-                      <Check className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate">
-                        {lang === "en"
-                          ? "Request Sent"
-                          : "கோரிக்கை அனுப்பப்பட்டது"}
-                      </span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Service Info */}
-          <div className="mb-4">
-            {/* Service Type */}
-            <div className="mb-4 min-h-[40px]">
-              <span className="inline-flex items-center justify-center px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 text-sm font-medium rounded-lg w-full line-clamp-2 h-full">
-                {getServiceName(provider.serviceType)}
-              </span>
-            </div>
-
-            {/* Location - UPDATED with block */}
-            <div className="flex items-center gap-1.5 text-sm text-gray-600 mb-4 min-h-[24px]">
-              <MapPin className="w-4 h-4 flex-shrink-0 text-gray-500" />
-              <span className="truncate font-medium">
-                {getDistrictName(provider.district)}
-                {provider.block && (
-                  <span className="text-gray-500">, {provider.block}</span>
-                )}
-              </span>
-            </div>
-
-            {/* Rating & Jobs */}
-            <div className="mb-4 min-h-[60px]">
-              <div className="flex items-center gap-2 mb-2">
-                <StarRating
-                  rating={provider.rating}
-                  size="md"
-                  showText={true}
-                  showReviews={true}
-                  totalReviews={provider.totalReviews}
-                />
-                {provider.totalReviews > 0 && (
-                  <button
-                    onClick={() => handleShowReviews(provider)}
-                    className="ml-2 px-2 py-1 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1"
-                    title={
-                      lang === "en" ? "View Reviews" : "மதிப்பீடுகளைக் காண்க"
-                    }
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    <span>
-                      {provider.totalReviews}{" "}
-                      {lang === "en" ? "reviews" : "மதிப்பீடுகள்"}
-                    </span>
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-gray-600">
-                <Briefcase className="w-3.5 h-3.5 flex-shrink-0 text-gray-500" />
-                <span className="truncate">
-                  {provider.completedJobs}{" "}
-                  {lang === "en" ? "jobs completed" : "வேலைகள் முடிந்தன"}
                 </span>
-              </div>
-            </div>
-
-            {/* Recent Review Preview - NEW */}
-            {recentReview && recentReview.comment && (
-              <div className="pt-3 border-t border-gray-100 mb-4">
-                <div className="flex items-start gap-2 text-xs">
-                  <Quote className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <StarRating
-                        rating={recentReview.rating}
-                        size="xs"
-                        showText={false}
-                      />
-                      <span className="text-gray-500 text-xs">
-                        {recentReview.seekerName}
-                      </span>
-                    </div>
-                    <p className="text-gray-600 line-clamp-2 italic">
-                      "
-                      {recentReview.comment.length > 80
-                        ? recentReview.comment.substring(0, 80) + "..."
-                        : recentReview.comment}
-                      "
-                    </p>
-                    <button
-                      onClick={() => handleShowReviews(provider)}
-                      className="mt-1 text-blue-600 hover:text-blue-700 text-xs font-medium"
-                    >
-                      {lang === "en"
-                        ? "View all reviews"
-                        : "அனைத்து மதிப்பீடுகளையும் காண்க"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Availability Summary */}
-            {provider.availabilitySettings && (
-              <div className="pt-3 border-t border-gray-100 space-y-2 min-h-[60px]">
-                <div className="flex items-start gap-2 text-xs text-gray-600">
-                  <Clock className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                  <span className="font-medium truncate leading-tight">
-                    {formatAvailabilityTime(provider)}
-                  </span>
-                </div>
-                {provider.availabilitySettings.serviceRadius && (
-                  <div className="flex items-start gap-2 text-xs text-gray-600">
-                    <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                    <span className="truncate leading-tight">
-                      {provider.availabilitySettings.serviceRadius} km{" "}
-                      {lang === "en" ? "radius" : "ஆரம்"}
+                {provider.hasActiveRequest && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
+                    <Check className="w-3 h-3" />
+                    <span className="truncate max-w-[70px]">
+                      {lang === "en" ? "Sent" : "அனுப்பப்பட்டது"}
                     </span>
-                  </div>
+                  </span>
                 )}
               </div>
-            )}
+            </div>
           </div>
+
+          {/* Service Type (compact) */}
+          <div className="mb-2">
+            <span className="inline-block w-full text-center text-xs font-medium bg-blue-50 text-blue-800 px-2 py-1 rounded-lg">
+              {getServiceName(provider.serviceType)}
+            </span>
+          </div>
+
+          {/* Location */}
+          <div className="flex items-center gap-1 text-xs text-gray-600 mb-2">
+            <MapPin className="w-3 h-3 flex-shrink-0 text-gray-500" />
+            <span className="truncate">
+              {getDistrictName(provider.district)}
+              {provider.block && (
+                <span className="text-gray-500">, {provider.block}</span>
+              )}
+            </span>
+          </div>
+
+          {/* Rating and jobs (compact) */}
+          <div className="flex items-center justify-between mb-2">
+            <StarRating
+              rating={provider.rating}
+              size="xs"
+              showText={true}
+              showReviews={true}
+              totalReviews={provider.totalReviews}
+            />
+            <div className="flex items-center gap-1 text-xs text-gray-600">
+              <Briefcase className="w-3 h-3" />
+              <span>{provider.completedJobs}</span>
+            </div>
+          </div>
+
+          {/* Recent Review Preview (if available) */}
+          {recentReview && recentReview.comment && (
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="flex items-start gap-1.5">
+                <Quote className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <StarRating
+                      rating={recentReview.rating}
+                      size="xs"
+                      showText={false}
+                    />
+                    <span className="text-gray-500 text-xs truncate max-w-[80px]">
+                      {recentReview.seekerName}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
+                    "
+                    {recentReview.comment.length > 80
+                      ? recentReview.comment.substring(0, 80) + "..."
+                      : recentReview.comment}
+                    "
+                  </p>
+                  <button
+                    onClick={() => setReviewsModalProvider(provider)}
+                    className="mt-1 text-blue-600 hover:text-blue-700 text-xs font-medium"
+                  >
+                    {lang === "en"
+                      ? "View all reviews"
+                      : "அனைத்து மதிப்பீடுகளையும் காண்க"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="p-5 pt-0 mt-auto">
-          <div className="flex gap-2 min-h-[42px]">
-            {/* Reviews Button */}
-            {provider.totalReviews > 0 && (
-              <button
-                onClick={() => handleShowReviews(provider)}
-                className="flex-1 py-2.5 border border-amber-300 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 text-sm font-medium flex items-center justify-center gap-2 transition hover:border-amber-400 px-2 min-w-[100px]"
-              >
-                <MessageSquare className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">
-                  {lang === "en" ? "Reviews" : "மதிப்பீடுகள்"}
-                </span>
-              </button>
-            )}
-
-            {/* Details Button */}
-            {provider.availabilitySettings && (
-              <button
-                onClick={() => handleShowAvailabilityDetails(provider)}
-                className="flex-1 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center justify-center gap-2 transition hover:border-gray-400 px-2 min-w-[100px]"
-              >
-                <Eye className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">
-                  {lang === "en" ? "Details" : "விவரங்கள்"}
-                </span>
-              </button>
-            )}
+        {/* Action Buttons (2 buttons: Details & Request) */}
+        <div className="p-3 pt-0 mt-auto border-t border-gray-100">
+          <div className="grid grid-cols-2 gap-2">
+            {/* Details Button (opens full details modal) */}
+            <button
+              onClick={() => setAvailabilityModalProvider(provider)}
+              className="py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium flex items-center justify-center gap-1 transition"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>{lang === "en" ? "Details" : "விவரங்கள்"}</span>
+            </button>
 
             {/* Request Button */}
             <button
@@ -1800,28 +1568,28 @@ export default function HomeSection() {
                 setShowRequestModal(true);
               }}
               disabled={!canRequest}
-              className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all px-2 min-w-[120px] ${
+              className={`py-2 rounded-lg text-xs font-medium transition ${
                 canRequest
-                  ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-sm hover:shadow"
+                  ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-sm"
                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
               }`}
             >
-              <span className="truncate block">
+              <span className="block truncate">
                 {provider.hasActiveRequest
                   ? lang === "en"
-                    ? "Request Sent"
-                    : "கோரிக்கை அனுப்பப்பட்டது"
+                    ? "Sent"
+                    : "அனுப்பப்பட்டது"
                   : !seekerAddress?.district
-                  ? lang === "en"
-                    ? "Set Address"
-                    : "முகவரியை அமைக்கவும்"
-                  : !provider.availability
-                  ? lang === "en"
-                    ? "Unavailable"
-                    : "கிடைக்கவில்லை"
-                  : lang === "en"
-                  ? "Request"
-                  : "கோருங்கள்"}
+                    ? lang === "en"
+                      ? "Set Addr"
+                      : "முகவரி"
+                    : !provider.availability
+                      ? lang === "en"
+                        ? "Busy"
+                        : "பிஸி"
+                      : lang === "en"
+                        ? "Request"
+                        : "கோருங்கள்"}
               </span>
             </button>
           </div>
@@ -1848,7 +1616,6 @@ export default function HomeSection() {
       {/* Header Section */}
       <div className="bg-gradient-to-r from-blue-50 to-white rounded-2xl border border-blue-100 p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* Location Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-4 mb-3">
               <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex-shrink-0">
@@ -1884,8 +1651,6 @@ export default function HomeSection() {
               </div>
             </div>
           </div>
-
-          {/* Search Bar */}
           <div className="flex-1 max-w-lg min-w-[300px]">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1923,7 +1688,6 @@ export default function HomeSection() {
               </p>
             </div>
           </div>
-
           <div className="flex items-center gap-3 flex-shrink-0">
             {!loading && filteredProviders.length > 0 && (
               <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-medium whitespace-nowrap min-w-[120px] text-center">
@@ -1940,7 +1704,6 @@ export default function HomeSection() {
             </button>
           </div>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* District Filter */}
           <div className="min-w-0">
@@ -1965,7 +1728,6 @@ export default function HomeSection() {
               <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
-
           {/* Service Type Filter */}
           <div className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
@@ -1984,8 +1746,8 @@ export default function HomeSection() {
                   {selectedService
                     ? getServiceName(selectedService)
                     : lang === "en"
-                    ? "All Services"
-                    : "அனைத்து சேவைகளும்"}
+                      ? "All Services"
+                      : "அனைத்து சேவைகளும்"}
                 </span>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {selectedService && (
@@ -2008,7 +1770,6 @@ export default function HomeSection() {
                   />
                 </div>
               </div>
-
               {showServiceDropdown && (
                 <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-64 overflow-hidden">
                   <div className="p-3 border-b">
@@ -2028,7 +1789,6 @@ export default function HomeSection() {
                       />
                     </div>
                   </div>
-
                   <div className="overflow-y-auto max-h-48">
                     {filteredServices.length === 0 ? (
                       <div className="py-4 text-center text-gray-500 text-sm">
@@ -2067,7 +1827,6 @@ export default function HomeSection() {
               )}
             </div>
           </div>
-
           {/* Rating Filter */}
           <div className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
@@ -2086,7 +1845,6 @@ export default function HomeSection() {
               ))}
             </select>
           </div>
-
           {/* Availability Filter */}
           <div className="flex flex-col justify-end">
             <div className="flex items-center gap-3 h-12">
@@ -2095,7 +1853,6 @@ export default function HomeSection() {
                 onClick={() => setShowOnlyAvailable(!showOnlyAvailable)}
                 className="flex items-center gap-3 cursor-pointer select-none"
               >
-                {/* Toggle Switch */}
                 <div
                   className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${
                     showOnlyAvailable ? "bg-green-500" : "bg-gray-300"
@@ -2152,7 +1909,6 @@ export default function HomeSection() {
             </div>
           )}
         </div>
-
         {!loading && filteredProviders.length > 0 && (
           <button
             onClick={refreshAllProviders}
@@ -2167,9 +1923,11 @@ export default function HomeSection() {
       {/* Providers Grid */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <ProviderCardSkeleton key={i} />
-          ))}
+          {Array(6)
+            .fill(0)
+            .map((_, i) => (
+              <ProviderCardSkeleton key={i} />
+            ))}
         </div>
       ) : filteredProviders.length === 0 ? (
         <div className="text-center py-16 bg-gradient-to-b from-white to-gray-50 rounded-2xl border border-gray-200">
@@ -2186,16 +1944,14 @@ export default function HomeSection() {
               ? "Try adjusting your filters or search terms to find what you're looking for."
               : "நீங்கள் தேடுவதைக் கண்டுபிடிக்க உங்கள் வடிப்பான்கள் அல்லது தேடல் விதிமுறைகளை மாற்றவும்."}
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={handleResetFilters}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium text-sm shadow-sm hover:shadow transition whitespace-nowrap"
-            >
-              {lang === "en"
-                ? "Reset All Filters"
-                : "அனைத்து வடிப்பான்களையும் மீட்டமை"}
-            </button>
-          </div>
+          <button
+            onClick={handleResetFilters}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium text-sm shadow-sm hover:shadow transition whitespace-nowrap"
+          >
+            {lang === "en"
+              ? "Reset All Filters"
+              : "அனைத்து வடிப்பான்களையும் மீட்டமை"}
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2208,7 +1964,7 @@ export default function HomeSection() {
         </div>
       )}
 
-      {/* Reviews Modal */}
+      {/* Modals */}
       {reviewsModalProvider && (
         <ReviewsModal
           provider={reviewsModalProvider}
@@ -2217,8 +1973,6 @@ export default function HomeSection() {
           lang={lang}
         />
       )}
-
-      {/* Availability Details Modal */}
       {availabilityModalProvider && (
         <AvailabilityDetailsModal
           provider={availabilityModalProvider}
@@ -2228,7 +1982,7 @@ export default function HomeSection() {
         />
       )}
 
-      {/* Request Modal */}
+      {/* Request Modal with Slider */}
       <AnimatePresence>
         {showRequestModal && selectedProvider && (
           <motion.div
@@ -2238,7 +1992,7 @@ export default function HomeSection() {
             onClick={() => {
               setShowRequestModal(false);
               setServiceDescription("");
-              setUrgency("2h");
+              setUrgencyHours(2);
             }}
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           >
@@ -2250,7 +2004,6 @@ export default function HomeSection() {
               className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             >
               <div className="p-6">
-                {/* Modal Header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="min-w-0">
                     <h3 className="text-xl font-bold text-gray-900 truncate">
@@ -2266,14 +2019,13 @@ export default function HomeSection() {
                     onClick={() => {
                       setShowRequestModal(false);
                       setServiceDescription("");
-                      setUrgency("2h");
+                      setUrgencyHours(2);
                     }}
                     className="p-2 hover:bg-gray-100 rounded-xl transition flex-shrink-0"
                   >
                     <X className="w-5 h-5 text-gray-500" />
                   </button>
                 </div>
-
                 {/* Provider Info */}
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 mb-6">
                   <div className="flex items-center gap-4">
@@ -2322,66 +2074,81 @@ export default function HomeSection() {
                     </div>
                   </div>
                 </div>
-
-                {/* Service Form */}
                 <div className="space-y-5">
-                  {/* Description */}
+                  {/* Description - Optional */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2 whitespace-nowrap">
                       {lang === "en" ? "Service Description" : "சேவை விளக்கம்"}{" "}
-                      *
+                      <span className="text-gray-400 text-xs font-normal">
+                        ({lang === "en" ? "Optional" : "விருப்பத்தேர்வு"})
+                      </span>
                     </label>
                     <textarea
                       value={serviceDescription}
                       onChange={(e) => setServiceDescription(e.target.value)}
                       placeholder={
                         lang === "en"
-                          ? "Describe what you need in detail..."
-                          : "உங்களுக்கு என்ன தேவை என விரிவாக விவரிக்கவும்..."
+                          ? "Describe what you need (optional)..."
+                          : "உங்களுக்கு என்ன தேவை என விவரிக்கவும் (விருப்பத்தேர்வு)..."
                       }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm min-h-[120px] resize-none"
-                      rows={4}
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
                     />
                   </div>
-
-                  {/* Urgency */}
+                  {/* Urgency Slider */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3 whitespace-nowrap">
-                      {lang === "en" ? "Urgency" : "அவசரத்தன்மை"}
+                      {lang === "en"
+                        ? "Urgency (Hours)"
+                        : "அவசரத்தன்மை (மணி நேரம்)"}
                     </label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {URGENCY_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setUrgency(option.value)}
-                          className={`py-3 text-sm rounded-lg border transition-all min-h-[80px] ${
-                            urgency === option.value
-                              ? "border-blue-500 bg-blue-50 text-blue-700 font-medium ring-2 ring-blue-100"
-                              : "border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="font-medium text-base truncate px-1">
-                            {lang === "en" ? option.en : option.ta}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1 truncate px-1">
-                            {option.value === "1h"
-                              ? lang === "en"
-                                ? "Fast response"
-                                : "விரைவான பதில்"
-                              : option.value === "2h"
-                              ? lang === "en"
-                                ? "Standard"
-                                : "நிலையான"
-                              : lang === "en"
-                              ? "Flexible"
-                              : "நெகிழ்வான"}
-                          </div>
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      <div className="px-2">
+                        <input
+                          type="range"
+                          min="1"
+                          max="24"
+                          value={urgencyHours}
+                          onChange={(e) =>
+                            setUrgencyHours(parseInt(e.target.value))
+                          }
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                          style={{
+                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
+                              (urgencyHours / 24) * 100
+                            }%, #e5e7eb ${(urgencyHours / 24) * 100}%, #e5e7eb 100%)`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Timer className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {lang === "en"
+                              ? "Time needed:"
+                              : "தேவைப்படும் நேரம்:"}
+                          </span>
+                          <span className="text-lg font-bold text-blue-600">
+                            {getUrgencyText(urgencyHours)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">1h</span>
+                          <span className="text-xs text-gray-500">24h</span>
+                        </div>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-blue-600" />
+                          <p className="text-xs text-blue-700">
+                            {lang === "en"
+                              ? `Request expires in ${getUrgencyText(urgencyHours)} if not accepted`
+                              : `ஏற்கப்படாவிட்டால் ${getUrgencyText(urgencyHours)} இல் கோரிக்கை காலாவதியாகும்`}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
                   {/* Privacy Note */}
                   <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
                     <div className="flex items-start gap-3">
@@ -2400,14 +2167,13 @@ export default function HomeSection() {
                       </div>
                     </div>
                   </div>
-
                   {/* Action Buttons */}
                   <div className="flex gap-3 pt-2">
                     <button
                       onClick={() => {
                         setShowRequestModal(false);
                         setServiceDescription("");
-                        setUrgency("2h");
+                        setUrgencyHours(2);
                       }}
                       className="flex-1 py-3.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium text-sm transition min-w-[100px]"
                     >
@@ -2415,7 +2181,7 @@ export default function HomeSection() {
                     </button>
                     <button
                       onClick={handleSendRequest}
-                      disabled={submittingRequest || !serviceDescription.trim()}
+                      disabled={submittingRequest}
                       className="flex-1 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 min-w-[120px]"
                     >
                       {submittingRequest ? (

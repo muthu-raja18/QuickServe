@@ -25,6 +25,8 @@ import {
   ExternalLink,
   XCircle,
   Download,
+  Info,
+  DollarSign,
 } from "lucide-react";
 
 import { db } from "../../../firebase/config";
@@ -118,15 +120,14 @@ interface ProfileData {
   emailVerified: boolean;
   phoneVerified: boolean;
   createdAt: Date;
-  rating?: {
-    average: number;
-    totalReviews: number;
-  };
+  rating?: { average: number; totalReviews: number };
+  description?: string;
+  pricing?: string;
 }
 
-// ✅ FIXED: Rating calculation function (SAME as HomeSection)
+// Rating calculation function
 const calculateProviderRatingFromJobs = async (
-  providerId: string
+  providerId: string,
 ): Promise<{ rating: number; completedJobs: number; totalReviews: number }> => {
   try {
     const requestsRef = collection(db, "serviceRequests");
@@ -134,28 +135,19 @@ const calculateProviderRatingFromJobs = async (
       requestsRef,
       where("providerId", "==", providerId),
       where("status", "==", "completed"),
-      where("seekerRating", ">", 0)
+      where("seekerRating", ">", 0),
     );
-
     const snapshot = await getDocs(q);
-    const jobs = snapshot.docs.map((doc) => ({
-      rating: doc.data().seekerRating || 0,
-    }));
-
     const completedJobs = snapshot.size;
-    const ratedJobs = jobs.filter((job) => job.rating > 0);
-    const totalReviews = ratedJobs.length;
-
-    let averageRating = 0;
-    if (ratedJobs.length > 0) {
-      const totalRating = ratedJobs.reduce((sum, job) => sum + job.rating, 0);
-      averageRating = totalRating / ratedJobs.length;
-    }
-
+    let totalRating = 0;
+    snapshot.docs.forEach((doc) => {
+      totalRating += doc.data().seekerRating || 0;
+    });
+    const averageRating = completedJobs > 0 ? totalRating / completedJobs : 0;
     return {
       rating: parseFloat(averageRating.toFixed(1)),
       completedJobs,
-      totalReviews,
+      totalReviews: completedJobs,
     };
   } catch (error) {
     console.error("Error calculating provider rating:", error);
@@ -167,27 +159,15 @@ const calculateProviderRatingFromJobs = async (
 const safeToDate = (value: any): Date => {
   try {
     if (!value) return new Date();
-
-    if (typeof value.toDate === "function") {
-      return value.toDate();
-    }
-
+    if (typeof value.toDate === "function") return value.toDate();
     if (typeof value === "string") {
       const date = new Date(value);
       return isNaN(date.getTime()) ? new Date() : date;
     }
-
-    if (value instanceof Date) {
-      return value;
-    }
-
-    if (typeof value === "number") {
-      return new Date(value);
-    }
-
+    if (value instanceof Date) return value;
+    if (typeof value === "number") return new Date(value);
     return new Date();
-  } catch (error) {
-    console.error("Error converting to date:", value, error);
+  } catch {
     return new Date();
   }
 };
@@ -204,7 +184,6 @@ const StarRating = ({
 }) => {
   const starSize =
     size === "lg" ? "w-6 h-6" : size === "md" ? "w-5 h-5" : "w-4 h-4";
-
   return (
     <div className="flex items-center gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
@@ -214,8 +193,8 @@ const StarRating = ({
             star <= Math.floor(rating)
               ? "text-yellow-500 fill-yellow-500"
               : star <= rating
-              ? "text-yellow-300 fill-yellow-300"
-              : "text-gray-300"
+                ? "text-yellow-300 fill-yellow-300"
+                : "text-gray-300"
           }`}
         />
       ))}
@@ -266,7 +245,6 @@ const TEXTS = {
     pendingApproval: "Pending Approval",
     averageRating: "Average Rating",
     reviews: "reviews",
-    totalReviews: "total reviews",
     approved: "Approved",
     lessThan1Year: "Less than 1 year",
     oneToThree: "1-3 years",
@@ -275,7 +253,7 @@ const TEXTS = {
     tenPlus: "10+ years",
     viewPhoto: "View Photo",
     viewDocument: "View Document",
-    zoom : "Zoom",
+    zoom: "Zoom",
     close: "Close",
     download: "Download",
     openNewTab: "Open in new tab",
@@ -287,6 +265,18 @@ const TEXTS = {
     photoPreview: "Photo Preview",
     provider: "Provider",
     backToProfile: "Back to Profile",
+    aboutMe: "About Me & Services",
+    aboutMeDesc: "Describe your services and pricing information",
+    description: "Service Description",
+    descriptionPlaceholder:
+      "Describe your services, expertise, and what makes you unique...",
+    pricing: "Pricing Information",
+    pricingPlaceholder:
+      "e.g., ₹300-500 per visit, ₹200 per hour, Call for quote...",
+    noDescription: "No description provided",
+    noPricing: "No pricing information provided",
+    charLimit: (limit: number) => `Max ${limit} characters`,
+    remaining: (count: number) => `${count} characters remaining`,
   },
   ta: {
     profileSettings: "சுயவிவர அமைப்புகள்",
@@ -324,7 +314,6 @@ const TEXTS = {
     pendingApproval: "ஒப்புதலுக்காக காத்திருக்கிறது",
     averageRating: "சராசரி மதிப்பீடு",
     reviews: "மதிப்பீடுகள்",
-    totalReviews: "மொத்த மதிப்பீடுகள்",
     approved: "அங்கீகரிக்கப்பட்டது",
     lessThan1Year: "1 வருடத்திற்கும் குறைவாக",
     oneToThree: "1-3 ஆண்டுகள்",
@@ -333,7 +322,7 @@ const TEXTS = {
     tenPlus: "10+ ஆண்டுகள்",
     viewPhoto: "புகைப்படத்தைக் காண்க",
     viewDocument: "ஆவணத்தைக் காண்க",
-    zoom : "பெரிதாக்கு",
+    zoom: "பெரிதாக்கு",
     close: "மூடு",
     download: "பதிவிறக்கம்",
     openNewTab: "புதிய தாவலில் திறக்கவும்",
@@ -345,10 +334,26 @@ const TEXTS = {
     photoPreview: "புகைப்பட முன்னோட்டம்",
     provider: "வழங்குநர்",
     backToProfile: "சுயவிவரத்திற்குத் திரும்புக",
+    aboutMe: "என்னைப் பற்றி & சேவைகள்",
+    aboutMeDesc: "உங்கள் சேவைகள் மற்றும் விலை தகவல்களை விவரிக்கவும்",
+    description: "சேவை விளக்கம்",
+    descriptionPlaceholder:
+      "உங்கள் சேவைகள், நிபுணத்துவம் மற்றும் உங்களை தனித்துவமாக்குவது பற்றி விவரிக்கவும்...",
+    pricing: "விலை தகவல்",
+    pricingPlaceholder:
+      "எ.கா., ஒரு விஜயத்திற்கு ₹300-500, ஒரு மணி நேரத்திற்கு ₹200, மேலும் தகவலுக்கு அழைக்கவும்...",
+    noDescription: "விளக்கம் எதுவும் வழங்கப்படவில்லை",
+    noPricing: "விலை தகவல் எதுவும் வழங்கப்படவில்லை",
+    charLimit: (limit: number) => `அதிகபட்சம் ${limit} எழுத்துக்கள்`,
+    remaining: (count: number) => `${count} எழுத்துக்கள் மீதமுள்ளன`,
   },
 };
 
-// View Modal Component
+// Character limits
+const DESCRIPTION_LIMIT = 500;
+const PRICING_LIMIT = 200;
+
+// View Modal Component (unchanged)
 const ViewModal = ({
   isOpen,
   type,
@@ -357,26 +362,16 @@ const ViewModal = ({
   providerName,
   onClose,
   lang = "en",
-}: {
-  isOpen: boolean;
-  type: "photo" | "document";
-  url: string;
-  title: string;
-  providerName: string;
-  onClose: () => void;
-  lang?: string;
-}) => {
+}: any) => {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const t = TEXTS[lang as keyof typeof TEXTS] || TEXTS.en;
-
-  const isPDF = url.toLowerCase().endsWith(".pdf");
+  const isPDF = url?.toLowerCase().endsWith(".pdf");
 
   const zoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
   const zoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
   const rotate = () => setRotation((prev) => (prev + 90) % 360);
-
   const toggleFullscreen = () => {
     if (!isFullscreen) {
       document.documentElement.requestFullscreen();
@@ -387,18 +382,13 @@ const ViewModal = ({
     }
   };
 
-  // Handle fullscreen change
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        setIsFullscreen(false);
-      }
+      if (!document.fullscreenElement) setIsFullscreen(false);
     };
-
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
+    return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
   }, []);
 
   if (!isOpen) return null;
@@ -406,13 +396,11 @@ const ViewModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title={t.close}
+              className="p-2 hover:bg-gray-100 rounded-lg"
             >
               <X className="w-5 h-5 text-gray-600" />
             </button>
@@ -428,22 +416,19 @@ const ViewModal = ({
               <>
                 <button
                   onClick={zoomOut}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title={t.zoomOut}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   <XCircle className="w-5 h-5 text-gray-600" />
                 </button>
                 <button
                   onClick={zoomIn}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title={t.zoomIn}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   <Eye className="w-5 h-5 text-gray-600" />
                 </button>
                 <button
                   onClick={rotate}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title={t.rotate}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   <svg
                     className="w-5 h-5 text-gray-600"
@@ -463,8 +448,7 @@ const ViewModal = ({
             )}
             <button
               onClick={toggleFullscreen}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title={t.fullscreen}
+              className="p-2 hover:bg-gray-100 rounded-lg"
             >
               <ExternalLink className="w-5 h-5 text-gray-600" />
             </button>
@@ -472,54 +456,41 @@ const ViewModal = ({
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
-              title={t.openNewTab}
+              className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg"
             >
               <ExternalLink className="w-5 h-5" />
             </a>
             <a
               href={url}
               download
-              className="p-2 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
-              title={t.download}
+              className="p-2 hover:bg-green-50 text-green-600 rounded-lg"
             >
               <Download className="w-5 h-5" />
             </a>
           </div>
         </div>
-
-        {/* Modal Content */}
         <div className="flex-1 overflow-auto p-4">
           <div className="flex items-center justify-center h-full min-h-[400px]">
             {type === "photo" ? (
-              <div className="relative max-w-full max-h-full">
-                <img
-                  src={url}
-                  alt={title}
-                  className="rounded-lg shadow-lg"
-                  style={{
-                    transform: `scale(${scale}) rotate(${rotation}deg)`,
-                    transition: "transform 0.2s ease",
-                    maxWidth: "100%",
-                    maxHeight: "calc(90vh - 120px)",
-                    objectFit: "contain",
-                  }}
-                />
-                {scale !== 1 && (
-                  <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm">
-                    {Math.round(scale * 100)}%
-                  </div>
-                )}
-              </div>
+              <img
+                src={url}
+                alt={title}
+                className="rounded-lg shadow-lg"
+                style={{
+                  transform: `scale(${scale}) rotate(${rotation}deg)`,
+                  transition: "transform 0.2s ease",
+                  maxWidth: "100%",
+                  maxHeight: "calc(90vh - 120px)",
+                  objectFit: "contain",
+                }}
+              />
             ) : isPDF ? (
-              <div className="w-full h-full">
-                <iframe
-                  src={`${url}#toolbar=0&navpanes=0&scrollbar=0`}
-                  className="w-full h-full rounded-lg border"
-                  title={title}
-                  style={{ minHeight: "500px" }}
-                />
-              </div>
+              <iframe
+                src={`${url}#toolbar=0`}
+                className="w-full h-full rounded-lg border"
+                title={title}
+                style={{ minHeight: "500px" }}
+              />
             ) : (
               <img
                 src={url}
@@ -529,35 +500,25 @@ const ViewModal = ({
             )}
           </div>
         </div>
-
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              {type === "photo" && (
-                <div className="flex items-center gap-4">
-                  <span>
-                    {t.zoom}: {Math.round(scale * 100)}%
-                  </span>
-                  <span>
-                    {t.rotate}: {rotation}°
-                  </span>
-                </div>
-              )}
-              {type === "document" && isPDF && (
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  <span>PDF Document</span>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-lg transition-colors font-medium"
-            >
-              {t.backToProfile}
-            </button>
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between">
+          <div className="text-sm text-gray-600">
+            {type === "photo" && (
+              <>
+                <span>
+                  {t.zoom}: {Math.round(scale * 100)}%
+                </span>
+                <span className="ml-4">
+                  {t.rotate}: {rotation}°
+                </span>
+              </>
+            )}
           </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-lg"
+          >
+            {t.backToProfile}
+          </button>
         </div>
       </div>
     </div>
@@ -583,86 +544,52 @@ export default function ProfileSection() {
     emailVerified: false,
     phoneVerified: false,
     createdAt: new Date(),
-    rating: {
-      average: 0,
-      totalReviews: 0,
-    },
+    rating: { average: 0, totalReviews: 0 },
+    description: "",
+    pricing: "",
   });
-
-  const [calculatedRating, setCalculatedRating] = useState<{
-    rating: number;
-    completedJobs: number;
-    totalReviews: number;
-  }>({
+  const [calculatedRating, setCalculatedRating] = useState({
     rating: 0,
     completedJobs: 0,
     totalReviews: 0,
   });
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  // View modal state
-  const [viewModal, setViewModal] = useState<{
-    isOpen: boolean;
-    type: "photo" | "document";
-    url: string;
-    title: string;
-  }>({
+  const [viewModal, setViewModal] = useState({
     isOpen: false,
-    type: "photo",
+    type: "photo" as "photo" | "document",
     url: "",
     title: "",
   });
 
-  // Open view modal
-  const openViewModal = (type: "photo" | "document", url: string) => {
+  const openViewModal = (type: "photo" | "document", url: string) =>
     setViewModal({
       isOpen: true,
       type,
       url,
       title: type === "photo" ? t.photoPreview : t.documentPreview,
     });
-  };
+  const closeViewModal = () =>
+    setViewModal({ isOpen: false, type: "photo", url: "", title: "" });
 
-  // Close view modal
-  const closeViewModal = () => {
-    setViewModal({
-      isOpen: false,
-      type: "photo",
-      url: "",
-      title: "",
-    });
-  };
-
-  // Load profile data and calculate rating
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
       return;
     }
-
     const loadProfile = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // ✅ FIXED: Load profile AND calculate rating from jobs
         const [providerDoc, ratingData] = await Promise.all([
           getDoc(doc(db, "providers", user.uid)),
           calculateProviderRatingFromJobs(user.uid),
         ]);
-
-        console.log("Rating data calculated:", ratingData);
         setCalculatedRating(ratingData);
-
         if (providerDoc.exists()) {
           const data = providerDoc.data();
-          const createdAtDate = safeToDate(data.createdAt);
-
           setProfile({
             name: data.name || "",
             email: data.email || user.email || "",
@@ -676,91 +603,57 @@ export default function ProfileSection() {
             status: data.status || "pending",
             emailVerified: data.emailVerified || false,
             phoneVerified: data.phoneVerified || false,
-            createdAt: createdAtDate,
-            rating: {
-              average: ratingData.rating, // ✅ Use calculated rating
-              totalReviews: ratingData.totalReviews,
-            },
-          });
-        } else {
-          setProfile({
-            name: "",
-            email: user.email || "",
-            phone: "",
-            serviceType: "",
-            district: "",
-            block: "",
-            experience: "",
-            photoLink: "",
-            proofLink: "",
-            status: "pending",
-            emailVerified: false,
-            phoneVerified: false,
-            createdAt: new Date(),
+            createdAt: safeToDate(data.createdAt),
             rating: {
               average: ratingData.rating,
               totalReviews: ratingData.totalReviews,
             },
+            description: data.description || "",
+            pricing: data.pricing || "",
           });
         }
-
-        setLoading(false);
       } catch (err) {
-        console.error("Error loading profile:", err);
+        console.error(err);
         setError(t.errorLoading);
+      } finally {
         setLoading(false);
       }
     };
-
     loadProfile();
   }, [user?.uid, lang]);
 
-  // Save profile changes
   const handleSave = async () => {
     if (!user?.uid) return;
-
     try {
       setSaving(true);
-      setError(null);
-
-      const providerRef = doc(db, "providers", user.uid);
-
-      const updateData = {
+      await updateDoc(doc(db, "providers", user.uid), {
         name: profile.name,
         phone: profile.phone,
         serviceType: profile.serviceType,
         district: profile.district,
         block: profile.block,
         experience: profile.experience,
+        description: profile.description,
+        pricing: profile.pricing,
         updatedAt: new Date(),
-      };
-
-      console.log("Saving profile update:", updateData);
-      await updateDoc(providerRef, updateData);
-
+      });
       setSuccess(t.profileUpdated);
       setEditing(false);
-
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error("Error saving profile:", err);
+    } catch (err) {
       setError(t.errorSaving);
     } finally {
       setSaving(false);
     }
   };
 
-  // Cancel editing
   const handleCancel = async () => {
     setEditing(false);
     if (!user?.uid) return;
-
     try {
       const providerDoc = await getDoc(doc(db, "providers", user.uid));
       if (providerDoc.exists()) {
         const data = providerDoc.data();
-        const createdAtDate = safeToDate(data.createdAt);
-
         setProfile((prev) => ({
           ...prev,
           name: data.name || "",
@@ -769,28 +662,21 @@ export default function ProfileSection() {
           district: data.district || "",
           block: data.block || "",
           experience: data.experience || "",
-          createdAt: createdAtDate,
+          description: data.description || "",
+          pricing: data.pricing || "",
         }));
       }
     } catch (err) {
-      console.error("Error reloading data:", err);
+      console.error(err);
     }
   };
 
-  // Format date for display
-  const formatDate = (date: Date) => {
-    try {
-      return date.toLocaleDateString(lang === "ta" ? "ta-IN" : "en-IN", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-    } catch (err) {
-      return "Invalid date";
-    }
-  };
-
-  // Experience options
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString(lang === "ta" ? "ta-IN" : "en-IN", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
   const experienceOptions = [
     { value: "Less than 1 year", label: t.lessThan1Year },
     { value: "1-3 years", label: t.oneToThree },
@@ -812,21 +698,27 @@ export default function ProfileSection() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-12 bg-gray-100 rounded-lg animate-pulse"
-              ></div>
-            ))}
+            {Array(6)
+              .fill(0)
+              .map((_, i) => (
+                <div
+                  key={i}
+                  className="h-12 bg-gray-100 rounded-lg animate-pulse"
+                ></div>
+              ))}
           </div>
         </div>
       </div>
     );
   }
 
+  // Character remaining helpers
+  const descRemaining = DESCRIPTION_LIMIT - (profile.description?.length || 0);
+  const pricingRemaining = PRICING_LIMIT - (profile.pricing?.length || 0);
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Edit/Save at top right */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">
@@ -864,43 +756,29 @@ export default function ProfileSection() {
         )}
       </div>
 
-      {/* Success/Error Messages */}
       {success && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-green-50 border border-green-200 rounded-xl p-4"
-        >
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
           <p className="text-green-800 flex items-center gap-2">
             <CheckCircle className="w-4 h-4" />
             {success}
           </p>
-        </motion.div>
+        </div>
       )}
-
       {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-red-50 border border-red-200 rounded-xl p-4"
-        >
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-red-800 font-medium">
-                {lang === "en" ? "Error" : "பிழை"}
-              </p>
+              <p className="text-red-800 font-medium">Error</p>
               <p className="text-red-700 text-sm mt-1">{error}</p>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
-      {/* Profile Card */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        {/* Profile Header with Photo */}
-        <div className="flex items-start gap-4 mb-6">
-          {/* Profile Photo Section */}
+        {/* Profile Header (unchanged) */}
+        <div className="flex items-start gap-4 pb-6 mb-6 border-b border-gray-200">
           <div className="relative group">
             {profile.photoLink ? (
               <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
@@ -912,8 +790,7 @@ export default function ProfileSection() {
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button
                     onClick={() => openViewModal("photo", profile.photoLink)}
-                    className="p-2 bg-white/90 rounded-full hover:bg-white transition"
-                    title={t.viewPhoto}
+                    className="p-2 bg-white/90 rounded-full"
                   >
                     <Eye className="w-5 h-5 text-gray-800" />
                   </button>
@@ -930,26 +807,24 @@ export default function ProfileSection() {
               </div>
             )}
           </div>
-
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <h3 className="text-xl font-bold text-gray-800 truncate">
                 {profile.name || t.notSet}
               </h3>
               {profile.status === "approved" ? (
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0">
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center gap-1">
                   <Shield className="w-3 h-3" />
                   {t.approved}
                 </span>
               ) : (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex-shrink-0">
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
                   {profile.status === "pending"
                     ? t.pendingApproval
                     : profile.status}
                 </span>
               )}
             </div>
-
             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
               <span className="flex items-center gap-1">
                 <Briefcase className="w-4 h-4" />
@@ -964,8 +839,6 @@ export default function ProfileSection() {
                 {t.memberSince} {formatDate(profile.createdAt)}
               </span>
             </div>
-
-            {/* ✅ FIXED: Rating Display (calculated from jobs) */}
             {calculatedRating.totalReviews > 0 && (
               <div className="mt-3 flex items-center gap-3">
                 <StarRating rating={calculatedRating.rating} size="md" />
@@ -981,36 +854,31 @@ export default function ProfileSection() {
           </div>
         </div>
 
-        {/* Profile Fields */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Personal Information */}
-          <div className="space-y-5">
-            <div className="pb-2 border-b border-gray-200">
-              <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2">
-                <User className="w-5 h-5 text-teal-600" />
-                {t.personalInfo}
-              </h4>
-            </div>
-
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.fullName}
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-                  placeholder={t.enterName}
-                />
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <User className="w-5 h-5 text-gray-500 flex-shrink-0" />
+        {/* Two Column Grid - Personal & Professional Info (unchanged) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+          {/* Personal Information Column */}
+          <div>
+            <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2 pb-2 border-b border-gray-200 mb-4">
+              <User className="w-5 h-5 text-teal-600" />
+              {t.personalInfo}
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.fullName}
+                </label>
+                {editing ? (
+                  <input
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) =>
+                      setProfile({ ...profile, name: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder={t.enterName}
+                  />
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span
                       className={
                         !profile.name ? "text-gray-400 italic" : "text-gray-800"
@@ -1019,52 +887,42 @@ export default function ProfileSection() {
                       {profile.name || t.notSet}
                     </span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Email (Read-only) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.emailAddress}
-              </label>
-              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.emailAddress}
+                </label>
+                <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between">
                     <span className="text-gray-800">{profile.email}</span>
+                    {profile.emailVerified && (
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        {t.verified}
+                      </span>
+                    )}
                   </div>
-                  {profile.emailVerified && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" />
-                      {t.verified}
-                    </span>
-                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.phoneNumber}
-              </label>
-              {editing ? (
-                <input
-                  type="tel"
-                  value={profile.phone}
-                  onChange={(e) =>
-                    setProfile({ ...profile, phone: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-                  placeholder="+91 9876543210"
-                  maxLength={10}
-                />
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-5 h-5 text-gray-500 flex-shrink-0" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.phoneNumber}
+                </label>
+                {editing ? (
+                  <input
+                    type="tel"
+                    value={profile.phone}
+                    onChange={(e) =>
+                      setProfile({ ...profile, phone: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="+91 9876543210"
+                    maxLength={10}
+                  />
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between">
                       <span
                         className={
                           !profile.phone
@@ -1074,42 +932,37 @@ export default function ProfileSection() {
                       >
                         {profile.phone || t.notSet}
                       </span>
+                      {profile.phoneVerified && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          {t.verified}
+                        </span>
+                      )}
                     </div>
-                    {profile.phoneVerified && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        {t.verified}
-                      </span>
-                    )}
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Years of Experience */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.yearsExperience}
-              </label>
-              {editing ? (
-                <select
-                  value={profile.experience}
-                  onChange={(e) =>
-                    setProfile({ ...profile, experience: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white"
-                >
-                  <option value="">{t.selectExperience}</option>
-                  {experienceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.yearsExperience}
+                </label>
+                {editing ? (
+                  <select
+                    value={profile.experience}
+                    onChange={(e) =>
+                      setProfile({ ...profile, experience: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  >
+                    <option value="">{t.selectExperience}</option>
+                    {experienceOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span
                       className={
                         !profile.experience
@@ -1120,44 +973,39 @@ export default function ProfileSection() {
                       {profile.experience || t.notSpecified}
                     </span>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Professional Information */}
-          <div className="space-y-5">
-            <div className="pb-2 border-b border-gray-200">
-              <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-blue-600" />
-                {t.professionalInfo}
-              </h4>
-            </div>
-
-            {/* Service Type */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.serviceType}
-              </label>
-              {editing ? (
-                <select
-                  value={profile.serviceType}
-                  onChange={(e) =>
-                    setProfile({ ...profile, serviceType: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white"
-                >
-                  <option value="">{t.selectService}</option>
-                  {SERVICE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <Briefcase className="w-5 h-5 text-gray-500 flex-shrink-0" />
+          {/* Professional Information Column */}
+          <div>
+            <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2 pb-2 border-b border-gray-200 mb-4">
+              <Briefcase className="w-5 h-5 text-blue-600" />
+              {t.professionalInfo}
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.serviceType}
+                </label>
+                {editing ? (
+                  <select
+                    value={profile.serviceType}
+                    onChange={(e) =>
+                      setProfile({ ...profile, serviceType: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  >
+                    <option value="">{t.selectService}</option>
+                    {SERVICE_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span
                       className={
                         !profile.serviceType
@@ -1168,34 +1016,29 @@ export default function ProfileSection() {
                       {profile.serviceType || t.notSet}
                     </span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* District */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.district}
-              </label>
-              {editing ? (
-                <select
-                  value={profile.district}
-                  onChange={(e) =>
-                    setProfile({ ...profile, district: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white"
-                >
-                  <option value="">{t.selectDistrict}</option>
-                  {TAMIL_NADU_DISTRICTS.map((district) => (
-                    <option key={district} value={district}>
-                      {district}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <MapPin className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.district}
+                </label>
+                {editing ? (
+                  <select
+                    value={profile.district}
+                    onChange={(e) =>
+                      setProfile({ ...profile, district: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  >
+                    <option value="">{t.selectDistrict}</option>
+                    {TAMIL_NADU_DISTRICTS.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span
                       className={
                         !profile.district
@@ -1206,29 +1049,24 @@ export default function ProfileSection() {
                       {profile.district || t.notSet}
                     </span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Block/Area */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.blockArea}
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={profile.block}
-                  onChange={(e) =>
-                    setProfile({ ...profile, block: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-                  placeholder={t.blockPlaceholder}
-                />
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <MapPin className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.blockArea}
+                </label>
+                {editing ? (
+                  <input
+                    type="text"
+                    value={profile.block}
+                    onChange={(e) =>
+                      setProfile({ ...profile, block: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder={t.blockPlaceholder}
+                  />
+                ) : (
+                  <div className="px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span
                       className={
                         !profile.block
@@ -1239,114 +1077,173 @@ export default function ProfileSection() {
                       {profile.block || t.notSet}
                     </span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Document Links with View Options */}
-            <div className="pt-4 border-t border-gray-200">
-              <h5 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-gray-500" />
-                {t.verificationDocs}
-              </h5>
-
-              <div className="space-y-3">
-                {/* Photo Link with View Option */}
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">{t.profilePhoto}</p>
-                  {profile.photoLink ? (
-                    <div className="flex gap-2">
-                      <div className="flex-1 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                        <a
-                          href={profile.photoLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                )}
+              </div>
+              <div>
+                <h5 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-gray-500" />
+                  {t.verificationDocs}
+                </h5>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">
+                      {t.profilePhoto}
+                    </p>
+                    {profile.photoLink ? (
+                      <div className="flex gap-2">
+                        <div className="flex-1 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 truncate text-sm text-blue-600">
+                          {profile.photoLink.length > 40
+                            ? profile.photoLink.substring(0, 40) + "..."
+                            : profile.photoLink}
+                        </div>
+                        <button
+                          onClick={() =>
+                            openViewModal("photo", profile.photoLink)
+                          }
+                          className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 flex items-center gap-2"
                         >
-                          <Link className="w-4 h-4 group-hover:scale-110 transition" />
-                          <span className="truncate">
-                            {profile.photoLink.length > 40
-                              ? profile.photoLink.substring(0, 40) + "..."
-                              : profile.photoLink}
-                          </span>
-                        </a>
+                          <Eye className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() =>
-                          openViewModal("photo", profile.photoLink)
-                        }
-                        className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition flex items-center gap-2"
-                        title={t.viewPhoto}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
-                      <span className="text-gray-400 italic text-sm">
+                    ) : (
+                      <div className="px-3 py-2 bg-gray-100 rounded-lg border border-gray-200 text-gray-400 italic text-sm">
                         {t.notProvided}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Proof Link with View Option */}
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">
-                    {t.proofDocument}
-                  </p>
-                  {profile.proofLink ? (
-                    <div className="flex gap-2">
-                      <div className="flex-1 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                        <a
-                          href={profile.proofLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2 group"
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">
+                      {t.proofDocument}
+                    </p>
+                    {profile.proofLink ? (
+                      <div className="flex gap-2">
+                        <div className="flex-1 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 truncate text-sm text-blue-600">
+                          {profile.proofLink.length > 40
+                            ? profile.proofLink.substring(0, 40) + "..."
+                            : profile.proofLink}
+                        </div>
+                        <button
+                          onClick={() =>
+                            openViewModal("document", profile.proofLink)
+                          }
+                          className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 flex items-center gap-2"
                         >
-                          <Link className="w-4 h-4 group-hover:scale-110 transition" />
-                          <span className="truncate">
-                            {profile.proofLink.length > 40
-                              ? profile.proofLink.substring(0, 40) + "..."
-                              : profile.proofLink}
-                          </span>
-                        </a>
+                          <Eye className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() =>
-                          openViewModal("document", profile.proofLink)
-                        }
-                        className="px-3 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition flex items-center gap-2"
-                        title={t.viewDocument}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
-                      <span className="text-gray-400 italic text-sm">
+                    ) : (
+                      <div className="px-3 py-2 bg-gray-100 rounded-lg border border-gray-200 text-gray-400 italic text-sm">
                         {t.notProvided}
-                      </span>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ✅ FIXED: Rating Information (Calculated from jobs) */}
+        {/* About Me Section - Full Width with character limits */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2 pb-2 border-b border-gray-200 mb-4">
+            <Info className="w-5 h-5 text-purple-600" />
+            {t.aboutMe}
+          </h4>
+          <p className="text-sm text-gray-500 mb-4">{t.aboutMeDesc}</p>
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t.description}
+                {editing && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    ({t.charLimit(DESCRIPTION_LIMIT)})
+                  </span>
+                )}
+              </label>
+              {editing ? (
+                <>
+                  <textarea
+                    value={profile.description}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= DESCRIPTION_LIMIT) {
+                        setProfile({ ...profile, description: value });
+                      }
+                    }}
+                    rows={4}
+                    maxLength={DESCRIPTION_LIMIT}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                    placeholder={t.descriptionPlaceholder}
+                  />
+                  <div className="text-xs text-gray-500 mt-1 text-right">
+                    {t.remaining(descRemaining)}
+                  </div>
+                </>
+              ) : (
+                <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200 min-h-[100px]">
+                  {profile.description ? (
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {profile.description}
+                    </p>
+                  ) : (
+                    <p className="text-gray-400 italic">{t.noDescription}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t.pricing}
+                {editing && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    ({t.charLimit(PRICING_LIMIT)})
+                  </span>
+                )}
+              </label>
+              {editing ? (
+                <>
+                  <textarea
+                    value={profile.pricing}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= PRICING_LIMIT) {
+                        setProfile({ ...profile, pricing: value });
+                      }
+                    }}
+                    rows={2}
+                    maxLength={PRICING_LIMIT}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                    placeholder={t.pricingPlaceholder}
+                  />
+                  <div className="text-xs text-gray-500 mt-1 text-right">
+                    {t.remaining(pricingRemaining)}
+                  </div>
+                </>
+              ) : (
+                <div className="px-4 py-3 bg-green-50 rounded-lg border border-green-200">
+                  {profile.pricing ? (
+                    <div className="flex items-start gap-3">
+                      <DollarSign className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-gray-700 whitespace-pre-wrap">
+                        {profile.pricing}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 italic">{t.noPricing}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Rating Section (unchanged) */}
         {calculatedRating.totalReviews > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-8 pt-6 border-t border-gray-200"
-          >
+          <div className="mt-8 pt-6 border-t border-gray-200">
             <h4 className="font-semibold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <Star className="w-5 h-5 text-amber-500" />
               {t.customerRatings}
             </h4>
-
             <div className="flex flex-col md:flex-row md:items-center gap-6 bg-gradient-to-r from-amber-50 to-yellow-50 p-5 rounded-xl border border-amber-100">
               <div className="text-center">
                 <div className="text-4xl font-bold text-gray-900">
@@ -1356,12 +1253,10 @@ export default function ProfileSection() {
                   {t.averageRating}
                 </div>
               </div>
-
               <div className="flex-1">
                 <div className="mb-2">
                   <StarRating rating={calculatedRating.rating} size="lg" />
                 </div>
-
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="text-sm text-gray-700">
                     <span className="font-medium">
@@ -1378,7 +1273,6 @@ export default function ProfileSection() {
                       : "வேலைகள் முடிக்கப்பட்டன"}
                   </div>
                 </div>
-
                 <p className="text-sm text-gray-500 mt-3">
                   {lang === "en"
                     ? "Based on actual service completion and customer feedback"
@@ -1386,11 +1280,10 @@ export default function ProfileSection() {
                 </p>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
       </div>
 
-      {/* View Modal */}
       <ViewModal
         isOpen={viewModal.isOpen}
         type={viewModal.type}

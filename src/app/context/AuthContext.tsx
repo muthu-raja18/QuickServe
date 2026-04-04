@@ -61,13 +61,23 @@ export interface SeekerData {
   createdAt: any;
 }
 
+export interface AdminData {
+  uid: string;
+  email: string;
+  name: string;
+  district: string | null; // null for super-admin
+  role: "district-admin" | "super-admin";
+  createdAt: any;
+}
+
 export interface AuthUser {
   uid: string;
   email: string | null;
   displayName?: string | null;
-  role: "provider" | "seeker" | null;
+  role: "provider" | "seeker" | "admin" | null;
   providerData?: ProviderData;
   seekerData?: SeekerData;
+  adminData?: AdminData;
   isApproved?: boolean;
 }
 
@@ -79,11 +89,11 @@ interface AuthContextType {
   login: (
     email: string,
     password: string,
-    role: "provider" | "seeker"
+    role: "provider" | "seeker",
   ) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  manualSetUser: (userData: Partial<AuthUser>) => void; // ✅ NEW
+  manualSetUser: (userData: Partial<AuthUser>) => void;
 }
 
 /* ===================== CONTEXT ===================== */
@@ -95,13 +105,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [userData, setUserData] = useState<SeekerData | ProviderData | null>(
-    null
+    null,
   );
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const [forceRefresh, setForceRefresh] = useState(0); // ✅ NEW: Force refresh counter
+  const [forceRefresh, setForceRefresh] = useState(0);
 
-  /* ---------- Setup Firebase Persistence ---------- */
   useEffect(() => {
     const setupPersistence = async () => {
       try {
@@ -114,88 +123,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setupPersistence();
   }, []);
 
-  /* ---------- Enhanced fetchUserData ---------- */
-  const fetchUserData = async (firebaseUser: User): Promise<AuthUser> => {
-    try {
-      // 1. FIRST: Check localStorage for quick role access
-      const storedRole = localStorage.getItem("userRole") as
-        | "provider"
-        | "seeker"
-        | null;
-
-      console.log("Auth Debug - Stored role from localStorage:", storedRole);
-
-      // ✅ NEW: If stored role exists, verify it's correct
-      if (storedRole) {
-        // Quick return with stored role, then verify in background
-        const immediateUser: AuthUser = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          role: storedRole,
-          isApproved: false,
-        };
-
-        // Background verification
-        setTimeout(async () => {
-          try {
-            const verifiedUser = await fetchFullUserData(firebaseUser);
-            if (auth.currentUser?.uid === firebaseUser.uid) {
-              // Only update if role changed
-              if (verifiedUser.role !== storedRole) {
-                console.log("Role mismatch detected, updating...");
-                setUser(verifiedUser);
-                setUserData(
-                  verifiedUser.seekerData || verifiedUser.providerData || null
-                );
-              }
-            }
-          } catch (error) {
-            console.error("Background verification error:", error);
-          }
-        }, 100);
-
-        return immediateUser;
-      }
-
-      // 2. No stored role - fetch from Firestore
-      return await fetchFullUserData(firebaseUser);
-    } catch (error) {
-      console.error("Error in fetchUserData:", error);
-      const storedRole = localStorage.getItem("userRole") as
-        | "provider"
-        | "seeker"
-        | null;
-      return {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        role: storedRole,
-      };
-    }
-  };
-
-  /* ---------- Helper: Fetch Complete User Data ---------- */
+  /* ---------- Helper: Fetch Complete User Data (including admin) ---------- */
   const fetchFullUserData = async (firebaseUser: User): Promise<AuthUser> => {
     try {
-      const [seekerSnap, providerSnap] = await Promise.all([
+      // Check seeker, provider, and admin collections
+      const [seekerSnap, providerSnap, adminSnap] = await Promise.all([
         getDoc(doc(db, "users", firebaseUser.uid)),
         getDoc(doc(db, "providers", firebaseUser.uid)),
+        getDoc(doc(db, "admins", firebaseUser.uid)),
       ]);
 
       const hasSeekerData = seekerSnap.exists();
       const hasProviderData = providerSnap.exists();
+      const hasAdminData = adminSnap.exists();
 
       console.log("Firestore data check:", {
         uid: firebaseUser.uid,
         hasSeekerData,
         hasProviderData,
+        hasAdminData,
       });
+
+      // Admin takes precedence because it's a special role
+      if (hasAdminData) {
+        const adminData = adminSnap.data() as AdminData;
+        localStorage.setItem("userRole", "admin");
+        return {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || adminData.name,
+          role: "admin",
+          adminData,
+        };
+      }
 
       let role: "provider" | "seeker" | null = null;
       let providerStatus: "pending" | "approved" | "rejected" | null = null;
 
-      // Determine role based on Firestore data
       if (hasSeekerData && !hasProviderData) {
         role = "seeker";
       } else if (hasProviderData && !hasSeekerData) {
@@ -213,13 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Store role in localStorage
       if (role) {
         localStorage.setItem("userRole", role);
         console.log("Role stored in localStorage:", role);
       }
 
-      // Build complete user object
       if (role === "provider" && hasProviderData) {
         const providerData = providerSnap.data() as ProviderData;
         return {
@@ -257,52 +219,113 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /* ---------- FIXED: Enhanced Auth State Listener ---------- */
+  /* ---------- Enhanced fetchUserData with quick role check ---------- */
+  const fetchUserData = async (firebaseUser: User): Promise<AuthUser> => {
+    try {
+      const storedRole = localStorage.getItem("userRole") as
+        | "provider"
+        | "seeker"
+        | "admin"
+        | null;
+
+      console.log("Auth Debug - Stored role from localStorage:", storedRole);
+
+      if (storedRole) {
+        // Quick return with stored role
+        const immediateUser: AuthUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role:
+            storedRole === "admin"
+              ? "admin"
+              : (storedRole as "provider" | "seeker"),
+          isApproved: false,
+        };
+
+        // Background verification
+        setTimeout(async () => {
+          try {
+            const verifiedUser = await fetchFullUserData(firebaseUser);
+            if (auth.currentUser?.uid === firebaseUser.uid) {
+              if (verifiedUser.role !== storedRole) {
+                console.log("Role mismatch detected, updating...");
+                setUser(verifiedUser);
+                setUserData(
+                  verifiedUser.seekerData || verifiedUser.providerData || null,
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Background verification error:", error);
+          }
+        }, 100);
+
+        return immediateUser;
+      }
+
+      return await fetchFullUserData(firebaseUser);
+    } catch (error) {
+      console.error("Error in fetchUserData:", error);
+      const storedRole = localStorage.getItem("userRole") as
+        | "provider"
+        | "seeker"
+        | "admin"
+        | null;
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        role:
+          storedRole === "admin"
+            ? "admin"
+            : (storedRole as "provider" | "seeker") || null,
+      };
+    }
+  };
+
+  /* ---------- Auth State Listener (with admin support) ---------- */
   useEffect(() => {
     console.log("🔄 AuthProvider mounted - Setting up listeners");
 
     let providerUnsub: Unsubscribe | null = null;
+    let adminUnsub: Unsubscribe | null = null;
     let isMounted = true;
     let cleanupCalled = false;
 
     const handleAuthStateChange = async (firebaseUser: User | null) => {
-      if (!isMounted || cleanupCalled) {
-        return;
-      }
+      if (!isMounted || cleanupCalled) return;
 
       console.log(
         "🔥 Auth state changed - Firebase user:",
-        firebaseUser?.email
+        firebaseUser?.email,
       );
 
-      // Set loading only if not initialized yet
-      if (!initialized) {
-        setLoading(true);
-      }
+      if (!initialized) setLoading(true);
 
       try {
         if (firebaseUser) {
           console.log("🔥 Fetching user data for:", firebaseUser.email);
 
-          // ✅ CRITICAL FIX: Check localStorage FIRST for Google login
           const storedRole = localStorage.getItem("userRole") as
             | "provider"
             | "seeker"
+            | "admin"
             | null;
 
-          // If we have stored role from Google login, use it immediately
           if (storedRole) {
             const immediateUser: AuthUser = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
-              role: storedRole,
+              role:
+                storedRole === "admin"
+                  ? "admin"
+                  : (storedRole as "provider" | "seeker"),
               isApproved: false,
             };
-
             setUser(immediateUser);
 
-            // Fetch full data in background
             setTimeout(async () => {
               try {
                 const fullUserData = await fetchFullUserData(firebaseUser);
@@ -313,7 +336,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ) {
                   setUser(fullUserData);
                   setUserData(
-                    fullUserData.seekerData || fullUserData.providerData || null
+                    fullUserData.seekerData ||
+                      fullUserData.providerData ||
+                      null,
                   );
                 }
               } catch (error) {
@@ -321,43 +346,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }, 0);
           } else {
-            // Normal flow for email/password login
             const authUser = await fetchUserData(firebaseUser);
             setUser(authUser);
             setUserData(authUser.seekerData || authUser.providerData || null);
           }
 
-          // Set up real-time listener for provider status
+          // Set up real-time listener for provider status if role is provider
           if (firebaseUser) {
-            if (providerUnsub) {
-              providerUnsub();
-            }
+            // Clean up previous listeners
+            if (providerUnsub) providerUnsub();
+            if (adminUnsub) adminUnsub();
 
-            providerUnsub = onSnapshot(
-              doc(db, "providers", firebaseUser.uid),
-              (snap) => {
-                if (!isMounted || cleanupCalled) return;
-
-                if (snap.exists()) {
-                  const providerData = snap.data() as ProviderData;
-                  console.log("Provider status updated:", providerData.status);
-
-                  setUser((prev) => {
-                    if (!prev || prev.uid !== firebaseUser.uid) return prev;
-
-                    return {
-                      ...prev,
-                      providerData,
-                      isApproved: providerData.status === "approved",
-                    };
-                  });
-                  setUserData(providerData);
+            // Listen to provider doc only if role might be provider
+            const checkRoleAndListen = async () => {
+              const adminSnap = await getDoc(
+                doc(db, "admins", firebaseUser.uid),
+              );
+              if (adminSnap.exists()) {
+                // Admin user: listen to admin doc
+                adminUnsub = onSnapshot(
+                  doc(db, "admins", firebaseUser.uid),
+                  (snap) => {
+                    if (!isMounted || cleanupCalled) return;
+                    if (snap.exists()) {
+                      const adminData = snap.data() as AdminData;
+                      setUser((prev) => {
+                        if (!prev || prev.uid !== firebaseUser.uid) return prev;
+                        return { ...prev, adminData, role: "admin" };
+                      });
+                    }
+                  },
+                  (error) => console.error("Admin snapshot error:", error),
+                );
+              } else {
+                // Not admin, possibly provider or seeker
+                const providerSnap = await getDoc(
+                  doc(db, "providers", firebaseUser.uid),
+                );
+                if (providerSnap.exists()) {
+                  providerUnsub = onSnapshot(
+                    doc(db, "providers", firebaseUser.uid),
+                    (snap) => {
+                      if (!isMounted || cleanupCalled) return;
+                      if (snap.exists()) {
+                        const providerData = snap.data() as ProviderData;
+                        console.log(
+                          "Provider status updated:",
+                          providerData.status,
+                        );
+                        setUser((prev) => {
+                          if (!prev || prev.uid !== firebaseUser.uid)
+                            return prev;
+                          return {
+                            ...prev,
+                            providerData,
+                            isApproved: providerData.status === "approved",
+                          };
+                        });
+                        setUserData(providerData);
+                      }
+                    },
+                    (error) => console.error("Provider snapshot error:", error),
+                  );
                 }
-              },
-              (error) => {
-                console.error("Provider snapshot error:", error);
               }
-            );
+            };
+            checkRoleAndListen();
           }
         } else {
           console.log("🔥 No Firebase user - clearing state");
@@ -365,74 +419,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserData(null);
           localStorage.removeItem("userRole");
 
-          if (providerUnsub) {
-            providerUnsub();
-            providerUnsub = null;
-          }
+          if (providerUnsub) providerUnsub();
+          if (adminUnsub) adminUnsub();
         }
       } catch (error) {
         console.error("🔥 Auth error in listener:", error);
         if (!isMounted || cleanupCalled) return;
-
         setUser(null);
         setUserData(null);
       } finally {
         if (!isMounted || cleanupCalled) return;
-
         setLoading(false);
-        if (!initialized) {
-          setInitialized(true);
-          console.log("✅ Auth initialization complete");
-        }
+        if (!initialized) setInitialized(true);
       }
     };
 
-    // Main auth listener
     const authUnsub = onAuthStateChanged(auth, handleAuthStateChange);
 
-    // ✅ NEW: Listen for manual auth refresh events (from Google login)
     const handleManualRefresh = () => {
       console.log("🔄 Manual auth refresh triggered");
-      if (auth.currentUser) {
-        handleAuthStateChange(auth.currentUser);
-      }
+      if (auth.currentUser) handleAuthStateChange(auth.currentUser);
     };
-
     window.addEventListener("authStateChanged", handleManualRefresh);
 
-    // Cleanup function
     return () => {
       console.log("🔄 AuthProvider cleanup - Removing listeners");
       cleanupCalled = true;
       isMounted = false;
-
       authUnsub();
       window.removeEventListener("authStateChanged", handleManualRefresh);
-
-      if (providerUnsub) {
-        providerUnsub();
-      }
+      if (providerUnsub) providerUnsub();
+      if (adminUnsub) adminUnsub();
     };
-  }, [forceRefresh]); // Add forceRefresh as dependency
+  }, [forceRefresh, initialized]);
 
   /* ---------- Login ---------- */
   const login = async (
     email: string,
     password: string,
-    role: "provider" | "seeker"
+    role: "provider" | "seeker",
   ) => {
     try {
       console.log("Login attempt for:", email, "role:", role);
       const result = await loginWithRole(email, password, role);
-
       if (result.success) {
         localStorage.setItem("userRole", role);
-        console.log("Role stored during login:", role);
-
-        // Force AuthContext refresh
         setForceRefresh((prev) => prev + 1);
       }
-
       return result;
     } catch (err: any) {
       console.error("Login error:", err);
@@ -440,7 +473,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /* ---------- NEW: Manual User Setter ---------- */
   const manualSetUser = (userData: Partial<AuthUser>) => {
     if (user) {
       setUser({ ...user, ...userData });
@@ -456,15 +488,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /* ---------- Logout ---------- */
   const signOut = async () => {
     console.log("Signing out - clearing localStorage");
     localStorage.removeItem("userRole");
     await firebaseSignOut(auth);
-    console.log("Sign out complete");
   };
 
-  /* ---------- Refresh User ---------- */
   const refreshUser = async () => {
     if (auth.currentUser) {
       console.log("Refreshing user data");
@@ -474,7 +503,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /* ---------- Context Value ---------- */
   const contextValue: AuthContextType = {
     user,
     userData,
@@ -483,15 +511,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     signOut,
     refreshUser,
-    manualSetUser, // ✅ NEW
+    manualSetUser,
   };
 
   return (
     <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 }
-
-/* ===================== HOOK ===================== */
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
