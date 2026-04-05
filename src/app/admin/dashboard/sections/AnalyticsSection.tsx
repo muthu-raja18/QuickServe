@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../context/LanguageContext";
+import { useAuth } from "../../../context/AuthContext"; // add
 import { db } from "../../../firebase/config";
 import { collection, getDocs } from "firebase/firestore";
 import { PieChart, MapPin, Loader2 } from "lucide-react";
@@ -15,12 +16,18 @@ interface DistrictAnalytics {
 
 export default function AnalyticsSection() {
   const { lang } = useLanguage();
+  const { user } = useAuth(); // get user
   const [districtAnalytics, setDistrictAnalytics] = useState<
     DistrictAnalytics[]
   >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Only fetch if user is logged in
+    if (!user) return;
+
+    let isMounted = true;
+
     const loadData = async () => {
       setLoading(true);
       try {
@@ -58,15 +65,19 @@ export default function AnalyticsSection() {
         const sorted = Array.from(districtMap.values()).sort(
           (a, b) => b.requestsCount - a.requestsCount,
         );
-        setDistrictAnalytics(sorted);
+        if (isMounted) setDistrictAnalytics(sorted);
       } catch (error) {
         console.error(error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     loadData();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]); // user as dependency
 
   if (loading)
     return (

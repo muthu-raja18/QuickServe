@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../context/LanguageContext";
+import { useAuth } from "../../../context/AuthContext"; // add this
 import { db } from "../../../firebase/config";
 import {
   collection,
@@ -25,7 +26,7 @@ import {
   ExternalLink,
   Loader2,
 } from "lucide-react";
-import { formatDate, formatRelativeTime } from "../utils/dataUtils"; // we'll create this
+import { formatDate, formatRelativeTime } from "../utils/dataUtils";
 
 interface Provider {
   id: string;
@@ -51,10 +52,14 @@ export default function ApprovalsSection({
   adminDistrict,
 }: ApprovalsSectionProps) {
   const { lang } = useLanguage();
+  const { user } = useAuth(); // get user from auth
   const [pendingProviders, setPendingProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Only run listener if user is logged in
+    if (!user) return;
+
     const providersRef = collection(db, "providers");
     let q: Query;
     if (!isSuperAdmin && adminDistrict) {
@@ -75,7 +80,7 @@ export default function ApprovalsSection({
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [isSuperAdmin, adminDistrict]);
+  }, [isSuperAdmin, adminDistrict, user]); // user as dependency
 
   const handleApprove = async (providerId: string, providerName: string) => {
     if (
@@ -121,7 +126,6 @@ export default function ApprovalsSection({
     url: string,
     providerName: string,
   ) => {
-    // Implement modal logic or reuse existing global modal – for brevity, we'll alert
     window.open(url, "_blank");
   };
 
