@@ -20,7 +20,6 @@ export default function AdminDashboardPage() {
   const [activeSection, setActiveSection] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Redirect if not authenticated or not admin
   useEffect(() => {
     if (!authLoading) {
       if (!user || user.role !== "admin") {
@@ -29,9 +28,12 @@ export default function AdminDashboardPage() {
     }
   }, [user, authLoading, router]);
 
-  const adminDistrict = user?.adminData?.district;
+  // Ensure adminDistrict is null for super admin (handle string "null" as well)
+  let adminDistrict = user?.adminData?.district;
+  if (adminDistrict === "null") adminDistrict = null;
   const isSuperAdmin = adminDistrict === null;
-  const stats = useRealtimeStats(isSuperAdmin, adminDistrict);
+
+  const stats = useRealtimeStats(isSuperAdmin, adminDistrict, user);
 
   if (authLoading) {
     return (
@@ -41,7 +43,6 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // Instead of showing "Access Denied", return null while redirecting
   if (!user || user.role !== "admin") {
     return null;
   }
@@ -71,7 +72,6 @@ export default function AdminDashboardPage() {
       default:
         return (
           <div className="space-y-6">
-            {/* Top stats cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-2xl p-5 shadow-sm border">
                 <div className="flex justify-between items-center mb-2">
@@ -134,7 +134,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             </div>
-            {/* Quick district leader info (only for super admin) */}
             {isSuperAdmin && (
               <div className="bg-white rounded-2xl p-5 border">
                 <h3 className="font-bold text-lg mb-2">

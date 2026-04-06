@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../context/LanguageContext";
-import { useAuth } from "../../../context/AuthContext"; // add this
+import { useAuth } from "../../../context/AuthContext";
 import { db } from "../../../firebase/config";
 import {
   collection,
@@ -23,7 +23,6 @@ import {
   Mail,
   Phone,
   Calendar,
-  ExternalLink,
   Loader2,
 } from "lucide-react";
 import { formatDate, formatRelativeTime } from "../utils/dataUtils";
@@ -52,12 +51,11 @@ export default function ApprovalsSection({
   adminDistrict,
 }: ApprovalsSectionProps) {
   const { lang } = useLanguage();
-  const { user } = useAuth(); // get user from auth
+  const { user } = useAuth();
   const [pendingProviders, setPendingProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only run listener if user is logged in
     if (!user) return;
 
     const providersRef = collection(db, "providers");
@@ -69,8 +67,10 @@ export default function ApprovalsSection({
         where("district", "==", adminDistrict),
       );
     } else {
+      // Super admin: fetch all pending providers (no district filter)
       q = query(providersRef, where("status", "==", "pending"));
     }
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const providers = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -79,8 +79,9 @@ export default function ApprovalsSection({
       setPendingProviders(providers);
       setLoading(false);
     });
+
     return () => unsubscribe();
-  }, [isSuperAdmin, adminDistrict, user]); // user as dependency
+  }, [isSuperAdmin, adminDistrict, user]);
 
   const handleApprove = async (providerId: string, providerName: string) => {
     if (

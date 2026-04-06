@@ -23,7 +23,7 @@ interface Stats {
 export const useRealtimeStats = (
   isSuperAdmin: boolean,
   adminDistrict: string | null,
-  user: any, // add user parameter
+  user: any,
 ) => {
   const [stats, setStats] = useState<Stats>({
     totalProviders: 0,
@@ -38,7 +38,6 @@ export const useRealtimeStats = (
   });
 
   useEffect(() => {
-    // Only run listeners if user is logged in
     if (!user) return;
 
     // Providers listener
@@ -117,7 +116,7 @@ export const useRealtimeStats = (
       unsubscribeProviders();
       unsubscribeRequests();
     };
-  }, [isSuperAdmin, adminDistrict, user]); // user as dependency
+  }, [isSuperAdmin, adminDistrict, user]);
 
   return stats;
 };
