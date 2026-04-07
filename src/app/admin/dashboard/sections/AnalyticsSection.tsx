@@ -88,7 +88,7 @@ export default function AnalyticsSection() {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-      <div className="p-5 border-b bg-gradient-to-r from-blue-50 to-white">
+      <div className="p-5 border-b bg-linear-to-r from-blue-50 to-white">
         <h2 className="font-bold text-gray-900 text-lg flex items-center gap-2">
           <PieChart className="w-5 h-5 text-blue-600" /> District-wise Activity
         </h2>
