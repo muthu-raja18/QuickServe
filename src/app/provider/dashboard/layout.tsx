@@ -20,8 +20,8 @@ import {
 } from "firebase/firestore";
 import Navbar from "../../components/Navbar";
 import Sidebar from "./components/Sidebar";
+import NotificationDropdown from "../../../components/NotificationDropdonw"; // ✅ Fixed typo
 
-// Lazy load sections with proper loading skeletons
 const SectionSkeleton = () => (
   <div className="space-y-6">
     <div className="h-8 bg-gray-200 rounded-lg w-64 animate-pulse" />
@@ -135,7 +135,7 @@ export default function ProviderDashboardLayout({
   const [loadingStats, setLoadingStats] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
-  const [checkingApproval, setCheckingApproval] = useState(false); // 🔥 ADDED
+  const [checkingApproval, setCheckingApproval] = useState(false);
 
   // Set mounted state
   useEffect(() => {
@@ -151,17 +151,16 @@ export default function ProviderDashboardLayout({
       fontSize: lang === "ta" ? "0.95rem" : "0.875rem",
       lineHeight: lang === "ta" ? "1.5" : "1.4",
     }),
-    [lang]
+    [lang],
   );
 
-  // 🔥 FIXED: Check if provider is approved by checking Firestore directly
+  // Check if provider is approved by checking Firestore directly
   useEffect(() => {
     if (authLoading || checkingApproval) return;
 
     const checkProviderApproval = async () => {
       console.log("Starting provider approval check...");
 
-      // Mark that initial check is done
       setInitialCheckDone(true);
 
       if (!user) {
@@ -176,7 +175,6 @@ export default function ProviderDashboardLayout({
         return;
       }
 
-      // 🔥 CRITICAL FIX: Check Firestore directly for approval status
       try {
         setCheckingApproval(true);
         const providerDoc = await getDoc(doc(db, "providers", user.uid));
@@ -199,7 +197,6 @@ export default function ProviderDashboardLayout({
         console.log("✅ Provider is approved, staying on dashboard");
       } catch (error) {
         console.error("Error checking provider approval:", error);
-        // On error, try to use the cached isApproved value
         if (!user.isApproved) {
           router.push("/provider/waiting");
         }
@@ -211,19 +208,19 @@ export default function ProviderDashboardLayout({
     checkProviderApproval();
   }, [user, authLoading, router]);
 
-  // Calculate if request is urgent (expiring in <30 minutes) - Memoized
+  // Calculate if request is urgent (expiring in <30 minutes)
   const isRequestUrgent = useCallback((expiresAt: Timestamp): boolean => {
     try {
       const expiryDate = expiresAt.toDate();
       const now = new Date();
       const timeRemaining = expiryDate.getTime() - now.getTime();
-      return timeRemaining > 0 && timeRemaining < 30 * 60 * 1000; // Less than 30 minutes
+      return timeRemaining > 0 && timeRemaining < 30 * 60 * 1000;
     } catch (error) {
       return false;
     }
   }, []);
 
-  // Load provider data - Separated from stats loading
+  // Load provider data
   useEffect(() => {
     if (!user?.uid || !user.providerData) return;
 
@@ -249,7 +246,6 @@ export default function ProviderDashboardLayout({
           setProviderData(providerInfo);
           setIsAvailable(providerInfo.availability);
 
-          // Update stats with provider info
           setDashboardStats((prev) => ({
             ...prev,
             providerDistrict: providerInfo.district,
@@ -270,7 +266,7 @@ export default function ProviderDashboardLayout({
     };
   }, [user?.uid]);
 
-  // REAL-TIME: Load all stats - OPTIMIZED
+  // REAL-TIME: Load all stats
   useEffect(() => {
     if (!user?.uid || !providerData) {
       setLoadingStats(false);
@@ -283,12 +279,11 @@ export default function ProviderDashboardLayout({
     const unsubscribeFunctions: (() => void)[] = [];
 
     try {
-      // 1. Listen for pending requests in provider's district and service type
       const requestsQuery = query(
         collection(db, "serviceRequests"),
         where("status", "==", "pending"),
         where("district", "==", providerData.district),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "desc"),
       );
 
       const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
@@ -307,7 +302,6 @@ export default function ProviderDashboardLayout({
             request.expiresAt.toDate() > new Date()
           ) {
             pendingCount++;
-
             if (request.expiresAt && isRequestUrgent(request.expiresAt)) {
               urgentCount++;
             }
@@ -323,11 +317,10 @@ export default function ProviderDashboardLayout({
 
       unsubscribeFunctions.push(unsubscribeRequests);
 
-      // 2. Load active jobs (accepted by this provider)
       const activeJobsQuery = query(
         collection(db, "serviceRequests"),
         where("providerId", "==", user.uid),
-        where("status", "in", ["accepted", "in_progress"])
+        where("status", "in", ["accepted", "in_progress"]),
       );
 
       const unsubscribeActiveJobs = onSnapshot(activeJobsQuery, (snapshot) => {
@@ -340,11 +333,10 @@ export default function ProviderDashboardLayout({
 
       unsubscribeFunctions.push(unsubscribeActiveJobs);
 
-      // 3. Load jobs awaiting confirmation
       const awaitingConfirmationQuery = query(
         collection(db, "serviceRequests"),
         where("providerId", "==", user.uid),
-        where("status", "==", "awaiting_confirmation")
+        where("status", "==", "awaiting_confirmation"),
       );
 
       const unsubscribeAwaitingConfirmation = onSnapshot(
@@ -355,19 +347,17 @@ export default function ProviderDashboardLayout({
             ...prev,
             awaitingConfirmation: snapshot.size,
           }));
-        }
+        },
       );
 
       unsubscribeFunctions.push(unsubscribeAwaitingConfirmation);
 
-      // Set loading to false after initial load
       const timer = setTimeout(() => {
         if (isMounted) {
           setLoadingStats(false);
         }
       }, 500);
 
-      // Cleanup all listeners and timer
       return () => {
         isMounted = false;
         clearTimeout(timer);
@@ -381,7 +371,7 @@ export default function ProviderDashboardLayout({
     }
   }, [user?.uid, providerData, isAvailable, isRequestUrgent]);
 
-  // Update availability in Firestore - Memoized
+  // Update availability in Firestore
   const updateAvailability = useCallback(
     async (available: boolean) => {
       if (!user?.uid) return;
@@ -402,7 +392,7 @@ export default function ProviderDashboardLayout({
         setIsAvailable(!available);
       }
     },
-    [user?.uid]
+    [user?.uid],
   );
 
   // Handle availability toggle
@@ -458,7 +448,7 @@ export default function ProviderDashboardLayout({
     return desc[lang];
   }, [lang]);
 
-  // Render active section - Memoized
+  // Render active section
   const renderContent = useMemo(() => {
     const sections = {
       home: <HomeSection />,
@@ -483,19 +473,6 @@ export default function ProviderDashboardLayout({
     };
     return sections[activeSection as keyof typeof sections] || sections.home;
   }, [activeSection, providerData, isAvailable, updateAvailability]);
-
-  // Calculate total notifications - Memoized
-  const totalNotifications = useMemo(() => {
-    return (
-      dashboardStats.pendingRequests +
-      dashboardStats.urgentRequests +
-      dashboardStats.awaitingConfirmation
-    );
-  }, [
-    dashboardStats.pendingRequests,
-    dashboardStats.urgentRequests,
-    dashboardStats.awaitingConfirmation,
-  ]);
 
   // Show loading while checking auth or approval
   if (authLoading || !mounted || checkingApproval) {
@@ -605,51 +582,14 @@ export default function ProviderDashboardLayout({
                           ? "Available"
                           : "கிடைக்கும்"
                         : lang === "en"
-                        ? "Busy"
-                        : "பிஸியாக"}
+                          ? "Busy"
+                          : "பிஸியாக"}
                     </span>
                     <Zap className="w-4 h-4 flex-shrink-0" />
                   </motion.button>
 
-                  {/* Notifications Badge */}
-                  {totalNotifications > 0 && (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        if (dashboardStats.urgentRequests > 0) {
-                          setActiveSection("requests");
-                        } else if (dashboardStats.awaitingConfirmation > 0) {
-                          setActiveSection("jobs");
-                        } else {
-                          setActiveSection("requests");
-                        }
-                      }}
-                      className="relative p-2"
-                    >
-                      <Bell className="w-5 h-5 text-gray-600" />
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className={`absolute -top-1 -right-1 w-6 h-6 text-white text-xs rounded-full flex items-center justify-center font-medium border-2 border-white ${
-                          dashboardStats.urgentRequests > 0
-                            ? "bg-red-500"
-                            : dashboardStats.awaitingConfirmation > 0
-                            ? "bg-purple-500"
-                            : "bg-amber-500"
-                        }`}
-                      >
-                        {totalNotifications > 9 ? "9+" : totalNotifications}
-                      </motion.span>
-                      {dashboardStats.urgentRequests > 0 && (
-                        <motion.div
-                          animate={{ scale: [1, 1.2, 1] }}
-                          transition={{ repeat: Infinity, duration: 1.5 }}
-                          className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full opacity-20"
-                        />
-                      )}
-                    </motion.button>
-                  )}
+                  {/* ✅ Notification Dropdown - Replaces the old badge */}
+                  {user?.uid && <NotificationDropdown userId={user.uid} />}
 
                   {/* Urgent Requests Alert */}
                   {dashboardStats.urgentRequests > 0 &&

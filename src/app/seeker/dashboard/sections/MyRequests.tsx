@@ -61,7 +61,7 @@ interface ServiceRequest {
   seekerReview?: string;
   seekerId: string;
   providerId?: string;
-  providerPhotoLink?: string; // Added for photo
+  providerPhotoLink?: string;
 }
 
 // Bilingual keywords for reviews
@@ -134,7 +134,7 @@ export default function MyRequestsSection() {
           ].filter(Boolean);
           const profileAddress = addressParts.join(", ");
           setUserAddress(profileAddress);
-          setCustomAddress(profileAddress); // Set as default for custom address
+          setCustomAddress(profileAddress);
         }
       } catch (error) {
         console.error("Error loading profile:", error);
@@ -144,7 +144,7 @@ export default function MyRequestsSection() {
     loadProfileData();
   }, [user]);
 
-  // ✅ FIXED: Safely get provider photo link
+  // Get provider photo link
   const getProviderPhotoLink = async (providerId: string): Promise<string> => {
     if (!providerId) return "";
 
@@ -153,28 +153,12 @@ export default function MyRequestsSection() {
       if (providerDoc.exists()) {
         const providerData = providerDoc.data();
 
-        // Check for photoLink in different possible locations
-        if (providerData.photoLink) {
-          return providerData.photoLink;
-        }
-
-        // Check for nested structure
-        if (providerData.profile && providerData.profile.photoLink) {
+        if (providerData.photoLink) return providerData.photoLink;
+        if (providerData.profile?.photoLink)
           return providerData.profile.photoLink;
-        }
-
-        // Check for cloudinaryURL or imageURL
-        if (providerData.cloudinaryURL) {
-          return providerData.cloudinaryURL;
-        }
-
-        if (providerData.imageURL) {
-          return providerData.imageURL;
-        }
-
-        if (providerData.profilePhoto) {
-          return providerData.profilePhoto;
-        }
+        if (providerData.cloudinaryURL) return providerData.cloudinaryURL;
+        if (providerData.imageURL) return providerData.imageURL;
+        if (providerData.profilePhoto) return providerData.profilePhoto;
       }
     } catch (error) {
       console.error(`Error fetching provider photo for ${providerId}:`, error);
@@ -183,7 +167,7 @@ export default function MyRequestsSection() {
     return "";
   };
 
-  // ✅ FIXED: Load requests with provider photo
+  // Load requests with real-time updates
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
@@ -207,22 +191,20 @@ export default function MyRequestsSection() {
                 ...data,
               } as ServiceRequest;
 
-              // ✅ FIXED: Fetch provider photo safely
               if (requestData.providerId) {
                 requestData.providerPhotoLink = await getProviderPhotoLink(
-                  requestData.providerId
+                  requestData.providerId,
                 );
               }
 
               return requestData;
-            })
+            }),
           );
 
-          // Sort by createdAt desc
           userRequests.sort(
             (a, b) =>
               (b.createdAt?.toMillis?.() || 0) -
-              (a.createdAt?.toMillis?.() || 0)
+              (a.createdAt?.toMillis?.() || 0),
           );
 
           setRequests(userRequests);
@@ -235,7 +217,7 @@ export default function MyRequestsSection() {
       (error) => {
         console.error("Error loading requests:", error);
         setLoading(false);
-      }
+      },
     );
 
     return () => unsubscribe();
@@ -304,14 +286,14 @@ export default function MyRequestsSection() {
     } catch (error) {
       console.error("Error cancelling request:", error);
       alert(
-        lang === "en" ? "Failed to cancel request" : "ரத்து செய்ய முடியவில்லை"
+        lang === "en" ? "Failed to cancel request" : "ரத்து செய்ய முடியவில்லை",
       );
     } finally {
       setLoadingAction(null);
     }
   };
 
-  // Share address
+  // ✅ FIXED: Share address - Now shows for in_progress status as well
   const handleShareAddress = async () => {
     if (!addressModalRequest) return;
 
@@ -322,7 +304,7 @@ export default function MyRequestsSection() {
       alert(
         lang === "en"
           ? "Please enter an address"
-          : "தயவுசெய்து ஒரு முகவரியை உள்ளிடவும்"
+          : "தயவுசெய்து ஒரு முகவரியை உள்ளிடவும்",
       );
       return;
     }
@@ -333,7 +315,6 @@ export default function MyRequestsSection() {
         exactAddress: addressToUse,
         seekerPhone: phoneToUse,
         addressShared: true,
-        status: "in_progress",
         addressSharedAt: serverTimestamp(),
       });
 
@@ -342,14 +323,14 @@ export default function MyRequestsSection() {
       alert(
         lang === "en"
           ? "Address shared successfully"
-          : "முகவரி வெற்றிகரமாக பகிரப்பட்டது"
+          : "முகவரி வெற்றிகரமாக பகிரப்பட்டது",
       );
     } catch (error) {
       console.error("Error sharing address:", error);
       alert(
         lang === "en"
           ? "Failed to share address"
-          : "முகவரியைப் பகிர முடியவில்லை"
+          : "முகவரியைப் பகிர முடியவில்லை",
       );
     } finally {
       setIsSharing(false);
@@ -362,9 +343,8 @@ export default function MyRequestsSection() {
 
     setLoadingAction(`rate-${ratingModalRequest.id}`);
     try {
-      // Get the provider ID from the service request
       const requestDoc = await getDoc(
-        doc(db, "serviceRequests", ratingModalRequest.id)
+        doc(db, "serviceRequests", ratingModalRequest.id),
       );
 
       if (!requestDoc.exists()) {
@@ -379,12 +359,11 @@ export default function MyRequestsSection() {
         alert(
           lang === "en"
             ? "Provider ID not found"
-            : "வழங்குநர் ஐடி கிடைக்கவில்லை"
+            : "வழங்குநர் ஐடி கிடைக்கவில்லை",
         );
         return;
       }
 
-      // Update the service request with rating and review
       await updateDoc(doc(db, "serviceRequests", ratingModalRequest.id), {
         status: "completed",
         seekerRating: rating,
@@ -392,14 +371,13 @@ export default function MyRequestsSection() {
         seekerConfirmedAt: serverTimestamp(),
       });
 
-      // Update the provider's rating
+      // Update provider rating
       const providerRef = doc(db, "providers", providerId);
       const providerDoc = await getDoc(providerRef);
 
       if (providerDoc.exists()) {
         const providerData = providerDoc.data();
 
-        // Get current rating values
         let currentRating = 0;
         let currentReviews = 0;
         let currentJobs = 0;
@@ -419,7 +397,6 @@ export default function MyRequestsSection() {
 
         currentJobs = providerData.completedJobs || currentReviews;
 
-        // Calculate new values
         const newReviews = currentReviews + 1;
         const newJobs = currentJobs + 1;
         const newRating =
@@ -427,7 +404,6 @@ export default function MyRequestsSection() {
             ? rating
             : (currentRating * currentReviews + rating) / newReviews;
 
-        // Update provider with new rating
         await updateDoc(providerRef, {
           rating: {
             average: parseFloat(newRating.toFixed(1)),
@@ -440,7 +416,6 @@ export default function MyRequestsSection() {
         });
       }
 
-      // Update local state to reflect changes without reloading
       setRequests((prevRequests) =>
         prevRequests.map((req) =>
           req.id === ratingModalRequest.id
@@ -450,25 +425,24 @@ export default function MyRequestsSection() {
                 seekerRating: rating,
                 seekerReview: reviewComment.trim() || undefined,
               }
-            : req
-        )
+            : req,
+        ),
       );
 
-      // Show success message
       setRatingModalRequest(null);
       setRating(0);
       setReviewComment("");
       alert(
         lang === "en"
           ? "Thank you for your rating! Service completed."
-          : "மதிப்பீட்டிற்கு நன்றி! சேவை முடிந்தது."
+          : "மதிப்பீட்டிற்கு நன்றி! சேவை முடிந்தது.",
       );
     } catch (error) {
       console.error("Error submitting rating:", error);
       alert(
         lang === "en"
           ? "Failed to submit rating"
-          : "மதிப்பீடு சமர்ப்பிக்க முடியவில்லை"
+          : "மதிப்பீடு சமர்ப்பிக்க முடியவில்லை",
       );
     } finally {
       setLoadingAction(null);
@@ -483,33 +457,39 @@ export default function MyRequestsSection() {
       alert(
         lang === "en"
           ? "Phone number not available"
-          : "தொலைபேசி எண் கிடைக்கவில்லை"
+          : "தொலைபேசி எண் கிடைக்கவில்லை",
       );
     }
   };
 
-  // Add keyword to review
   const addKeywordToReview = (keyword: string) => {
     if (reviewComment.includes(keyword)) return;
-
     const separator = reviewComment ? ", " : "";
     setReviewComment((prev) => prev + separator + keyword);
   };
 
-  // Reset address modal
   const resetAddressModal = () => {
     setAddressModalRequest(null);
     setEditAddressMode(false);
     setCustomAddress(userAddress);
   };
 
-  // Filter requests by status
+  // ✅ FIXED: Determine if address sharing should be shown
+  // Show for: status is "in_progress" OR "accepted" AND address not shared yet
+  const needsAddressSharing = (request: ServiceRequest) => {
+    return (
+      (request.status === "accepted" || request.status === "in_progress") &&
+      !request.addressShared &&
+      !request.exactAddress
+    );
+  };
+
+  // Filter requests
   const pendingRequests = requests.filter((req) => req.status === "pending");
   const activeRequests = requests.filter((req) =>
-    ["accepted", "in_progress", "awaiting_confirmation"].includes(req.status)
+    ["accepted", "in_progress", "awaiting_confirmation"].includes(req.status),
   );
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -525,7 +505,6 @@ export default function MyRequestsSection() {
     );
   }
 
-  // Total current requests
   const totalCurrentRequests = pendingRequests.length + activeRequests.length;
 
   return (
@@ -594,38 +573,20 @@ export default function MyRequestsSection() {
                   key={request.id}
                   className="bg-white rounded-lg border border-gray-200 p-4"
                 >
-                  {/* Provider Header with Photo */}
                   <div className="flex items-start gap-3 mb-3">
-                    {/* Provider Photo - Fixed rendering */}
                     <div className="relative w-12 h-12 flex-shrink-0">
                       {request.providerPhotoLink ? (
-                        <>
-                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
-                            <img
-                              src={request.providerPhotoLink}
-                              alt={request.providerName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  const fallbackDiv =
-                                    document.createElement("div");
-                                  fallbackDiv.className =
-                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
-                                  fallbackDiv.textContent = request.providerName
-                                    .charAt(0)
-                                    .toUpperCase();
-                                  parent.appendChild(fallbackDiv);
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
-                            <Camera className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        </>
+                        <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                          <img
+                            src={request.providerPhotoLink}
+                            alt={request.providerName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                           {request.providerName.charAt(0).toUpperCase()}
@@ -715,43 +676,30 @@ export default function MyRequestsSection() {
           </div>
           <div className="space-y-3">
             {activeRequests.map((request) => {
+              // Check if address sharing is needed
+              const showShareAddress = needsAddressSharing(request);
+              // Check if phone is available for contact
+              const showContactProvider = !!request.providerPhone;
+
               return (
                 <div
                   key={request.id}
                   className="bg-white rounded-lg border border-gray-200 p-4"
                 >
-                  {/* Provider Header with Photo */}
                   <div className="flex items-start gap-3 mb-3">
-                    {/* Provider Photo - Fixed rendering */}
                     <div className="relative w-12 h-12 flex-shrink-0">
                       {request.providerPhotoLink ? (
-                        <>
-                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
-                            <img
-                              src={request.providerPhotoLink}
-                              alt={request.providerName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  const fallbackDiv =
-                                    document.createElement("div");
-                                  fallbackDiv.className =
-                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
-                                  fallbackDiv.textContent = request.providerName
-                                    .charAt(0)
-                                    .toUpperCase();
-                                  parent.appendChild(fallbackDiv);
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
-                            <Camera className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        </>
+                        <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                          <img
+                            src={request.providerPhotoLink}
+                            alt={request.providerName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                           {request.providerName.charAt(0).toUpperCase()}
@@ -775,12 +723,12 @@ export default function MyRequestsSection() {
                               ? "Accepted"
                               : "ஏற்றுக்கொள்ளப்பட்டது"
                             : request.status === "in_progress"
-                            ? lang === "en"
-                              ? "In Progress"
-                              : "நடைபெறுகிறது"
-                            : lang === "en"
-                            ? "Awaiting Confirmation"
-                            : "உறுதிப்படுத்தல் காத்திருக்கிறது"}
+                              ? lang === "en"
+                                ? "In Progress"
+                                : "நடைபெறுகிறது"
+                              : lang === "en"
+                                ? "Awaiting Confirmation"
+                                : "உறுதிப்படுத்தல் காத்திருக்கிறது"}
                         </span>
                       </div>
                     </div>
@@ -803,43 +751,43 @@ export default function MyRequestsSection() {
                           : formatDate(request.createdAt)}
                       </span>
                     </div>
+                    {/* ✅ Provider Phone - Always visible after acceptance */}
                     <div className="flex items-center gap-2">
                       <Phone className="w-4 h-4" />
-                      <span>
-                        {request.providerPhone ? (
-                          <span className="text-green-600 font-medium">
-                            {request.providerPhone}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500">
-                            {lang === "en"
-                              ? "Phone: Hidden"
-                              : "தொலைபேசி: மறைக்கப்பட்டது"}
-                          </span>
-                        )}
-                      </span>
+                      {request.providerPhone ? (
+                        <span className="text-green-600 font-medium">
+                          {request.providerPhone}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">
+                          {lang === "en"
+                            ? "Phone: Hidden"
+                            : "தொலைபேசி: மறைக்கப்பட்டது"}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="space-y-2">
-                    {request.status === "accepted" &&
-                      !request.addressShared && (
-                        <button
-                          onClick={() => setAddressModalRequest(request)}
-                          className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center justify-center gap-2"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          {lang === "en"
-                            ? "Share Address"
-                            : "முகவரியைப் பகிரவும்"}
-                        </button>
-                      )}
+                  {/* ✅ ACTION BUTTONS - BOTH SHOWN TOGETHER */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {/* Share Address Button - Shows when needed */}
+                    {showShareAddress && (
+                      <button
+                        onClick={() => setAddressModalRequest(request)}
+                        className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center justify-center gap-2"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        {lang === "en"
+                          ? "Share Address"
+                          : "முகவரியைப் பகிரவும்"}
+                      </button>
+                    )}
 
+                    {/* Confirm & Rate Button - For awaiting confirmation */}
                     {request.status === "awaiting_confirmation" && (
                       <button
                         onClick={() => setRatingModalRequest(request)}
-                        className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center justify-center gap-2"
+                        className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center justify-center gap-2"
                       >
                         <CheckCircle className="w-4 h-4" />
                         {lang === "en"
@@ -848,12 +796,13 @@ export default function MyRequestsSection() {
                       </button>
                     )}
 
-                    {request.providerPhone && (
+                    {/* ✅ Contact Provider Button - Shows ALWAYS when phone is available */}
+                    {showContactProvider && (
                       <button
                         onClick={() =>
                           handleContactProvider(request.providerPhone)
                         }
-                        className="w-full py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                        className="flex-1 py-2 border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50 text-sm flex items-center justify-center gap-2"
                       >
                         <Phone className="w-4 h-4" />
                         {lang === "en"
@@ -862,6 +811,17 @@ export default function MyRequestsSection() {
                       </button>
                     )}
                   </div>
+
+                  {/* If no buttons should show (fallback) */}
+                  {!showShareAddress &&
+                    request.status !== "awaiting_confirmation" &&
+                    !showContactProvider && (
+                      <p className="text-center text-sm text-gray-500 py-2">
+                        {lang === "en"
+                          ? "Waiting for provider update"
+                          : "வழங்குநர் புதுப்பிப்பிற்காக காத்திருக்கிறது"}
+                      </p>
+                    )}
                 </div>
               );
             })}
@@ -894,7 +854,7 @@ export default function MyRequestsSection() {
         </div>
       )}
 
-      {/* Address Sharing Modal with Provider Photo */}
+      {/* Address Sharing Modal */}
       {addressModalRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -912,40 +872,21 @@ export default function MyRequestsSection() {
               </div>
 
               <div className="mb-6 space-y-4">
-                {/* Provider Info with Photo */}
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex items-center gap-3 mb-2">
-                    {/* Provider Photo in modal */}
                     <div className="relative w-12 h-12 flex-shrink-0">
                       {addressModalRequest.providerPhotoLink ? (
-                        <>
-                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
-                            <img
-                              src={addressModalRequest.providerPhotoLink}
-                              alt={addressModalRequest.providerName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  const fallbackDiv =
-                                    document.createElement("div");
-                                  fallbackDiv.className =
-                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
-                                  fallbackDiv.textContent =
-                                    addressModalRequest.providerName
-                                      .charAt(0)
-                                      .toUpperCase();
-                                  parent.appendChild(fallbackDiv);
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
-                            <Camera className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        </>
+                        <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                          <img
+                            src={addressModalRequest.providerPhotoLink}
+                            alt={addressModalRequest.providerName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                           {addressModalRequest.providerName
@@ -965,7 +906,6 @@ export default function MyRequestsSection() {
                   </div>
                 </div>
 
-                {/* Phone Display */}
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">
                     {lang === "en" ? "Your Phone" : "உங்கள் தொலைபேசி"}
@@ -981,7 +921,6 @@ export default function MyRequestsSection() {
                   </div>
                 </div>
 
-                {/* Address Section */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-medium text-gray-700">
@@ -1080,7 +1019,7 @@ export default function MyRequestsSection() {
         </div>
       )}
 
-      {/* Rating Modal with Provider Photo */}
+      {/* Rating Modal */}
       {ratingModalRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -1102,40 +1041,21 @@ export default function MyRequestsSection() {
               </div>
 
               <div className="mb-6">
-                {/* Provider Info with Photo */}
                 <div className="bg-green-50 p-3 rounded-lg mb-4">
                   <div className="flex items-center gap-3 mb-2">
-                    {/* Provider Photo in modal */}
                     <div className="relative w-12 h-12 flex-shrink-0">
                       {ratingModalRequest.providerPhotoLink ? (
-                        <>
-                          <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
-                            <img
-                              src={ratingModalRequest.providerPhotoLink}
-                              alt={ratingModalRequest.providerName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  const fallbackDiv =
-                                    document.createElement("div");
-                                  fallbackDiv.className =
-                                    "w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm";
-                                  fallbackDiv.textContent =
-                                    ratingModalRequest.providerName
-                                      .charAt(0)
-                                      .toUpperCase();
-                                  parent.appendChild(fallbackDiv);
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center">
-                            <Camera className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        </>
+                        <div className="w-full h-full rounded-full overflow-hidden border-2 border-white shadow-md">
+                          <img
+                            src={ratingModalRequest.providerPhotoLink}
+                            alt={ratingModalRequest.providerName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                           {ratingModalRequest.providerName
@@ -1160,7 +1080,6 @@ export default function MyRequestsSection() {
                   </p>
                 </div>
 
-                {/* Star Rating */}
                 <div className="mb-6">
                   <p className="text-sm font-medium text-gray-700 mb-3 text-center">
                     {lang === "en"
@@ -1197,7 +1116,6 @@ export default function MyRequestsSection() {
                   )}
                 </div>
 
-                {/* Review Comment */}
                 <div className="mb-6">
                   <p className="text-sm font-medium text-gray-700 mb-2">
                     {lang === "en"
@@ -1217,21 +1135,22 @@ export default function MyRequestsSection() {
                   />
                 </div>
 
-                {/* Suggested Keywords */}
                 <div className="mb-4">
                   <p className="text-sm font-medium text-gray-700 mb-2">
                     {lang === "en" ? "Suggestions" : "பரிந்துரைகள்"}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {REVIEW_KEYWORDS[lang].map((keyword, index) => (
-                      <button
-                        key={index}
-                        onClick={() => addKeywordToReview(keyword)}
-                        className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
-                      >
-                        {keyword}
-                      </button>
-                    ))}
+                    {REVIEW_KEYWORDS[lang as keyof typeof REVIEW_KEYWORDS].map(
+                      (keyword, index) => (
+                        <button
+                          key={index}
+                          onClick={() => addKeywordToReview(keyword)}
+                          className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition"
+                        >
+                          {keyword}
+                        </button>
+                      ),
+                    )}
                   </div>
                 </div>
               </div>

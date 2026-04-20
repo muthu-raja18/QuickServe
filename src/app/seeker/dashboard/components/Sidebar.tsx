@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "../../../context/LanguageContext";
 import { useAuth } from "../../../context/AuthContext";
 import { Search, Bell, History, User, LogOut, Menu, X } from "lucide-react";
+import { db } from "../../../firebase/config";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 interface SidebarProps {
   active: "home" | "requests" | "history" | "profile";
@@ -20,6 +22,51 @@ export default function Sidebar({
 }: SidebarProps) {
   const { lang } = useLanguage();
   const { user, signOut } = useAuth();
+
+  // Count states
+  const [activeRequestsCount, setActiveRequestsCount] = useState(0);
+  const [pendingRatingsCount, setPendingRatingsCount] = useState(0);
+
+  // Real-time count for active requests (accepted, in_progress, awaiting_confirmation)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const requestsRef = collection(db, "serviceRequests");
+    const q = query(
+      requestsRef,
+      where("seekerId", "==", user.uid),
+      where("status", "in", [
+        "accepted",
+        "in_progress",
+        "awaiting_confirmation",
+      ]),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setActiveRequestsCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // Real-time count for pending ratings (completed but not rated)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const requestsRef = collection(db, "serviceRequests");
+    const q = query(
+      requestsRef,
+      where("seekerId", "==", user.uid),
+      where("status", "==", "completed"),
+      where("seekerRating", "==", null),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingRatingsCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Handle logout
   const handleLogout = async () => {
@@ -109,7 +156,7 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Navigation - All items with equal space, no scrolling */}
+        {/* Navigation */}
         <div className="flex-1 flex flex-col p-4">
           <div className="flex-1 space-y-1">
             {/* Home */}
@@ -148,7 +195,7 @@ export default function Sidebar({
               )}
             </button>
 
-            {/* Requests */}
+            {/* Requests with Count Badge */}
             <button
               onClick={() => {
                 onChange("requests");
@@ -179,12 +226,17 @@ export default function Sidebar({
               <span className="font-medium text-sm flex-1 text-left">
                 {lang === "en" ? "Requests" : "கோரிக்கைகள்"}
               </span>
+              {activeRequestsCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  {activeRequestsCount > 99 ? "99+" : activeRequestsCount}
+                </span>
+              )}
               {active === "requests" && (
                 <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
               )}
             </button>
 
-            {/* History */}
+            {/* History with Count Badge (pending ratings) */}
             <button
               onClick={() => {
                 onChange("history");
@@ -215,6 +267,11 @@ export default function Sidebar({
               <span className="font-medium text-sm flex-1 text-left">
                 {lang === "en" ? "History" : "வரலாறு"}
               </span>
+              {pendingRatingsCount > 0 && (
+                <span className="ml-auto bg-yellow-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  {pendingRatingsCount > 99 ? "99+" : pendingRatingsCount}
+                </span>
+              )}
               {active === "history" && (
                 <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
               )}
@@ -260,7 +317,7 @@ export default function Sidebar({
           {/* Spacer to push logout to bottom */}
           <div className="flex-1"></div>
 
-          {/* Logout Button - Red color as requested */}
+          {/* Logout Button */}
           <button
             onClick={handleLogout}
             className="

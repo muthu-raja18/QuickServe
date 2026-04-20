@@ -1,6 +1,7 @@
+// src/app/provider/dashboard/sections/Requests.tsx - FULLY FIXED
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useLanguage } from "../../../context/LanguageContext";
 import { useAuth } from "../../../context/AuthContext";
 import {
@@ -15,11 +16,15 @@ import {
   Filter,
   Bell,
   MessageSquare,
-  Calendar,
-  Phone,
   EyeOff,
   Loader2,
   RefreshCw,
+  Image as ImageIcon,
+  Mic,
+  Play,
+  Pause,
+  X,
+  Volume2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -33,24 +38,36 @@ import {
   updateDoc,
   Timestamp,
   getDoc,
-  addDoc,
   serverTimestamp,
-  orderBy,
 } from "firebase/firestore";
+import {
+  createNotification,
+  NOTIFICATION_TYPES,
+} from "../../../../lib/notifications";
 
 interface ServiceRequest {
   id: string;
   seekerId: string;
   seekerName: string;
+  seekerEmail?: string;
+  seekerPhone?: string;
   serviceType: string;
   description: string;
   district: string;
   block: string;
   urgency: "1h" | "2h" | "1d";
-  status: "pending" | "accepted" | "rejected" | "expired" | "cancelled";
+  status:
+    | "pending"
+    | "accepted"
+    | "rejected"
+    | "expired"
+    | "cancelled"
+    | "in_progress";
   createdAt: Timestamp;
   expiresAt: Timestamp;
-  providerId: string;
+  voiceMessageUrl?: string;
+  imageUrl?: string;
+  providerId?: string;
 }
 
 // Bilingual texts
@@ -75,21 +92,27 @@ const TEXTS = {
     serviceDetails: "Service Details",
     serviceType: "Service Type",
     location: "Location",
-    requested: "Requested",
     acceptRequest: "Accept",
     decline: "Decline",
     accepting: "Accepting...",
     expired: "Expired",
-    privacyNote: "Seeker's contact details are protected until you accept",
+    privacyNote: "Your phone number will be shared after acceptance",
     refresh: "Refresh",
     loadingError: "Failed to load requests",
-    indexIssue: "Please wait a moment and try again",
     requests: "requests",
     minutes: "min",
     hours: "hr",
-    urgent: "Urgent",
     timeLeft: "left",
-    viewRequests: "View Requests",
+    voiceMessage: "Voice Message",
+    photo: "Photo",
+    listen: "Listen",
+    viewImage: "View Image",
+    close: "Close",
+    debug: "Debug Info",
+    providerId: "Your Provider ID",
+    matchingRequests: "Matching Requests",
+    noMedia: "No media attached",
+    playing: "Playing...",
   },
   ta: {
     title: "புதிய கோரிக்கைகள்",
@@ -111,22 +134,27 @@ const TEXTS = {
     serviceDetails: "சேவை விவரங்கள்",
     serviceType: "சேவை வகை",
     location: "இடம்",
-    requested: "கோரப்பட்டது",
     acceptRequest: "ஏற்கவும்",
     decline: "நிராகரிக்கவும்",
     accepting: "ஏற்கிறது...",
     expired: "காலாவதியானது",
-    privacyNote:
-      "நீங்கள் ஏற்றுக்கொள்ளும் வரை தேடுபவரின் தொடர்பு விவரங்கள் பாதுகாக்கப்படுகின்றன",
+    privacyNote: "நீங்கள் ஏற்றுக்கொண்ட பிறகு உங்கள் தொலைபேசி எண் பகிரப்படும்",
     refresh: "புதுப்பிக்கவும்",
     loadingError: "கோரிக்கைகளை ஏற்ற முடியவில்லை",
-    indexIssue: "சிறிது நேரம் காத்திருக்கவும், பின்னர் மீண்டும் முயற்சிக்கவும்",
     requests: "கோரிக்கைகள்",
     minutes: "நிமிட",
     hours: "மணி",
-    urgent: "அவசரம்",
     timeLeft: "மீதி",
-    viewRequests: "கோரிக்கைகளைப் பார்க்க",
+    voiceMessage: "குரல் செய்தி",
+    photo: "புகைப்படம்",
+    listen: "கேட்க",
+    viewImage: "படத்தைக் காண்க",
+    close: "மூடு",
+    debug: "சரிசெய்தல் தகவல்",
+    providerId: "உங்கள் வழங்குநர் ஐடி",
+    matchingRequests: "பொருந்தும் கோரிக்கைகள்",
+    noMedia: "எந்த மீடியாவும் இணைக்கப்படவில்லை",
+    playing: "இயங்குகிறது...",
   },
 };
 
@@ -135,6 +163,148 @@ interface RequestsSectionProps {
   providerServiceType: string;
   isAvailable: boolean;
 }
+
+// Audio Player Component
+const AudioPlayer = ({ url, lang }: { url: string; lang: string }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = async () => {
+    if (hasError) {
+      window.open(url, "_blank");
+      return;
+    }
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url);
+      audioRef.current.onplaying = () => setIsLoading(false);
+      audioRef.current.onended = () => setIsPlaying(false);
+      audioRef.current.onerror = () => {
+        setHasError(true);
+        setIsLoading(false);
+        setIsPlaying(false);
+      };
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      setIsLoading(true);
+      try {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } catch (error) {
+        console.error("Error playing audio:", error);
+        setHasError(true);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={togglePlay}
+        disabled={isLoading}
+        className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition cursor-pointer"
+      >
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : isPlaying ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4" />
+        )}
+        <span className="text-sm">
+          {isLoading
+            ? lang === "en"
+              ? "Loading..."
+              : "ஏற்றுகிறது..."
+            : isPlaying
+              ? lang === "en"
+                ? TEXTS.en.playing
+                : TEXTS.ta.playing
+              : lang === "en"
+                ? "Listen"
+                : "கேட்க"}
+        </span>
+      </button>
+      {hasError && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-red-500 underline"
+        >
+          {lang === "en" ? "Download" : "பதிவிறக்குக"}
+        </a>
+      )}
+    </div>
+  );
+};
+
+// Image Modal Component
+const ImageModal = ({
+  url,
+  onClose,
+  lang,
+}: {
+  url: string;
+  onClose: () => void;
+  lang: string;
+}) => {
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 cursor-pointer"
+    >
+      <motion.div
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        exit={{ scale: 0.9 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-w-[90vw] max-h-[90vh]"
+      >
+        {!imgError ? (
+          <img
+            src={url}
+            alt="Request attachment"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="bg-gray-800 p-8 rounded-lg text-center">
+            <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-white mb-3">Failed to load image</p>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline"
+            >
+              {lang === "en" ? "Open in browser" : "உலாவியில் திறக்கவும்"}
+            </a>
+          </div>
+        )}
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 p-2 bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer"
+        >
+          <X className="w-5 h-5 text-white" />
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+};
 
 export default function RequestsSection({
   providerDistrict,
@@ -147,15 +317,17 @@ export default function RequestsSection({
 
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingRequest, setProcessingRequest] = useState<string | null>(
-    null
+    null,
   );
   const [showFilter, setShowFilter] = useState(false);
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
+  const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   // Calculate time remaining
   const calculateTimeRemaining = useCallback(
@@ -180,16 +352,16 @@ export default function RequestsSection({
       }
 
       text += ` ${t.timeLeft}`;
-      const isUrgent = diffMs < 30 * 60 * 1000; // Less than 30 minutes
+      const isUrgent = diffMs < 30 * 60 * 1000;
 
       return { expired: false, hours, minutes, text, isUrgent };
     },
-    [lang]
+    [t],
   );
 
-  // Load requests
+  // Load requests - Direct query for providerId
   useEffect(() => {
-    if (!user?.uid || !isAvailable) {
+    if (!user?.uid) {
       setLoading(false);
       return;
     }
@@ -197,25 +369,39 @@ export default function RequestsSection({
     setLoading(true);
     setError(null);
 
+    console.log("🔍 Provider UID:", user.uid);
+    console.log("📍 Provider District:", providerDistrict);
+    console.log("🔧 Provider Service Type:", providerServiceType);
+
     const requestsRef = collection(db, "serviceRequests");
+
+    // Query for pending requests where providerId matches current provider
     const q = query(
       requestsRef,
       where("providerId", "==", user.uid),
       where("status", "==", "pending"),
-      orderBy("createdAt", "desc")
     );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
+        console.log("📦 Snapshot size:", snapshot.size);
+
         const now = Timestamp.now();
         const requestsData: ServiceRequest[] = [];
 
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
+          console.log("📄 Request doc:", doc.id, {
+            hasVoice: !!data.voiceMessageUrl,
+            hasImage: !!data.imageUrl,
+            voiceUrl: data.voiceMessageUrl,
+            imageUrl: data.imageUrl,
+          });
 
           // Check if expired
           if (data.expiresAt && data.expiresAt.toMillis() < now.toMillis()) {
+            console.log("⏰ Request expired, updating status:", doc.id);
             updateDoc(doc.ref, { status: "expired" }).catch(console.error);
             return;
           }
@@ -224,6 +410,8 @@ export default function RequestsSection({
             id: doc.id,
             seekerId: data.seekerId,
             seekerName: data.seekerName || "Anonymous Seeker",
+            seekerEmail: data.seekerEmail,
+            seekerPhone: data.seekerPhone,
             serviceType: data.serviceType,
             description: data.description || "",
             district: data.district,
@@ -232,25 +420,60 @@ export default function RequestsSection({
             status: data.status,
             createdAt: data.createdAt,
             expiresAt: data.expiresAt,
+            voiceMessageUrl: data.voiceMessageUrl,
+            imageUrl: data.imageUrl,
             providerId: data.providerId,
           });
         });
 
+        console.log("✅ Processed requests:", requestsData.length);
+        console.log(
+          "📊 Requests with voice:",
+          requestsData.filter((r) => r.voiceMessageUrl).length,
+        );
+        console.log(
+          "📷 Requests with image:",
+          requestsData.filter((r) => r.imageUrl).length,
+        );
+
+        setDebugInfo(
+          `Found ${requestsData.length} pending requests | Voice: ${requestsData.filter((r) => r.voiceMessageUrl).length} | Image: ${requestsData.filter((r) => r.imageUrl).length}`,
+        );
+
+        // Sort by createdAt descending (newest first)
+        requestsData.sort((a, b) => {
+          return (
+            (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)
+          );
+        });
+
         setRequests(requestsData);
-        setFilteredRequests(requestsData);
         setLoading(false);
       },
       (queryError: any) => {
-        console.error("Error loading requests:", queryError);
-        setError(t.loadingError);
+        console.error("❌ Error loading requests:", queryError);
+
+        if (queryError.message?.includes("index")) {
+          setError(
+            "Firestore index required. Please create the index using the link in console.",
+          );
+          console.log(
+            "🔗 Create index:",
+            queryError.message.match(
+              /https:\/\/console\.firebase\.google\.com[^\s]+/,
+            )?.[0],
+          );
+        } else {
+          setError(t.loadingError);
+        }
         setLoading(false);
-      }
+      },
     );
 
     return () => unsubscribe();
-  }, [user?.uid, isAvailable, lang]);
+  }, [user?.uid, t]);
 
-  // Apply urgency filter
+  // Apply urgency filter and sorting
   useEffect(() => {
     let filtered = [...requests];
 
@@ -258,20 +481,15 @@ export default function RequestsSection({
       filtered = filtered.filter((req) => req.urgency === urgencyFilter);
     }
 
-    // Sort by urgency (most urgent first)
     filtered.sort((a, b) => {
       const timeA = calculateTimeRemaining(a.expiresAt);
       const timeB = calculateTimeRemaining(b.expiresAt);
 
-      // Expired requests go to bottom
       if (timeA.expired && !timeB.expired) return 1;
       if (!timeA.expired && timeB.expired) return -1;
-
-      // Urgent requests come first
       if (timeA.isUrgent && !timeB.isUrgent) return -1;
       if (!timeA.isUrgent && timeB.isUrgent) return 1;
 
-      // Sort by remaining time (least time first)
       const totalA = (timeA.hours || 0) * 60 + (timeA.minutes || 0);
       const totalB = (timeB.hours || 0) * 60 + (timeB.minutes || 0);
       return totalA - totalB;
@@ -292,20 +510,18 @@ export default function RequestsSection({
         throw new Error("Request not found");
       }
 
-      // Get provider phone number
       const providerDoc = await getDoc(doc(db, "providers", user.uid));
       const providerData = providerDoc.data();
       const providerPhone = providerData?.phone || "";
 
-      // Update request status
       await updateDoc(doc(db, "serviceRequests", requestId), {
-        status: "accepted",
+        status: "in_progress",
+        providerName: providerData?.name || "",
+        providerPhone: providerPhone,
         acceptedAt: serverTimestamp(),
-        providerPhone: providerPhone, // ✅ Provider phone shared to seeker
       });
 
-      // Create notification for seeker
-      await addDoc(collection(db, "notifications"), {
+      await createNotification({
         userId: request.seekerId,
         title:
           lang === "en"
@@ -313,28 +529,25 @@ export default function RequestsSection({
             : "கோரிக்கை ஏற்றுக்கொள்ளப்பட்டது!",
         message:
           lang === "en"
-            ? `Provider accepted your request. Phone number shared. Please share your address.`
-            : `வழங்குநர் உங்கள் கோரிக்கையை ஏற்றுக்கொண்டார். தொலைபேசி எண் பகிரப்பட்டது. உங்கள் முகவரியைப் பகிரவும்.`,
-        type: "request_accepted",
-        createdAt: serverTimestamp(),
-        read: false,
+            ? `${providerData?.name || "Provider"} accepted your request. Phone number shared. Please share your address.`
+            : `${providerData?.name || "Provider"} உங்கள் கோரிக்கையை ஏற்றுக்கொண்டார். தொலைபேசி எண் பகிரப்பட்டது. உங்கள் முகவரியைப் பகிரவும்.`,
+        type: NOTIFICATION_TYPES.REQUEST_ACCEPTED,
         requestId: requestId,
       });
 
-      // Remove from local state
       setRequests((prev) => prev.filter((r) => r.id !== requestId));
 
       alert(
         lang === "en"
           ? "Request accepted! Your phone number is now visible to seeker."
-          : "கோரிக்கை ஏற்றுக்கொள்ளப்பட்டது! உங்கள் தொலைபேசி எண் இப்போது தேடுபவருக்குத் தெரியும்."
+          : "கோரிக்கை ஏற்றுக்கொள்ளப்பட்டது! உங்கள் தொலைபேசி எண் இப்போது தேடுபவருக்குத் தெரியும்.",
       );
     } catch (err: any) {
       console.error("Error accepting request:", err);
       alert(
         lang === "en"
           ? `Failed to accept request: ${err.message}`
-          : `கோரிக்கையை ஏற்க முடியவில்லை: ${err.message}`
+          : `கோரிக்கையை ஏற்க முடியவில்லை: ${err.message}`,
       );
     } finally {
       setProcessingRequest(null);
@@ -346,8 +559,8 @@ export default function RequestsSection({
     if (
       !confirm(
         lang === "en"
-          ? "Are you sure you want to reject this request?"
-          : "இந்தக் கோரிக்கையை நிராகரிக்க விரும்புகிறீர்களா?"
+          ? "Reject this request?"
+          : "இந்தக் கோரிக்கையை நிராகரிக்கவா?",
       )
     )
       return;
@@ -359,7 +572,6 @@ export default function RequestsSection({
         status: "rejected",
         rejectedAt: serverTimestamp(),
       });
-
       setRequests((prev) => prev.filter((r) => r.id !== requestId));
     } catch (err) {
       console.error("Error rejecting request:", err);
@@ -368,56 +580,31 @@ export default function RequestsSection({
     }
   };
 
-  // Format date
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
-    return date.toLocaleTimeString(lang === "ta" ? "ta-IN" : "en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  // Get urgency label
-  const getUrgencyLabel = (urgency: string) => {
-    const labels = {
-      "1h": lang === "en" ? "1 hour" : "1 மணி நேரம்",
-      "2h": lang === "en" ? "2 hours" : "2 மணி நேரம்",
-      "1d": lang === "en" ? "1 day" : "1 நாள்",
-    };
-    return labels[urgency as keyof typeof labels] || urgency;
-  };
-
-  // Clear filter
   const clearFilter = () => {
     setUrgencyFilter("all");
     setShowFilter(false);
   };
 
-  // Manual refresh
   const handleRefresh = () => {
     setLoading(true);
-    // The onSnapshot listener will automatically update
     setTimeout(() => setLoading(false), 500);
   };
 
-  // Loading state
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-64 bg-gray-100 rounded-xl animate-pulse"
-            />
-          ))}
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">
+            {lang === "en"
+              ? "Loading requests..."
+              : "கோரிக்கைகளை ஏற்றுகிறது..."}
+          </p>
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="text-center py-12">
@@ -428,7 +615,7 @@ export default function RequestsSection({
         <p className="text-gray-600 mb-6">{error}</p>
         <button
           onClick={handleRefresh}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto cursor-pointer"
         >
           <RefreshCw className="w-4 h-4" />
           {t.refresh}
@@ -437,29 +624,61 @@ export default function RequestsSection({
     );
   }
 
-  // Availability warning
-  if (!isAvailable) {
-    return (
-      <div className="text-center py-12">
-        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          {t.offline}
-        </h3>
-        <p className="text-gray-600 mb-6">{t.offlineDesc}</p>
-        <button
-          onClick={() =>
-            (window.location.href = "/provider/dashboard?section=availability")
-          }
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          {t.goOnline}
-        </button>
-      </div>
-    );
-  }
+  const showOfflineWarning = !isAvailable;
 
   return (
     <div className="space-y-6">
+      {/* Image Modal */}
+      <AnimatePresence>
+        {imageModalUrl && (
+          <ImageModal
+            url={imageModalUrl}
+            onClose={() => setImageModalUrl(null)}
+            lang={lang}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Debug Info */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="bg-gray-100 border border-gray-300 rounded-xl p-3 text-xs">
+          <details>
+            <summary className="font-mono cursor-pointer">{t.debug}</summary>
+            <div className="mt-2 space-y-1">
+              <p>
+                🔑 {t.providerId}: {user?.uid}
+              </p>
+              <p>
+                📍 {t.matchingRequests}: {requests.length}
+              </p>
+              <p>💬 {debugInfo}</p>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Offline Warning */}
+      {showOfflineWarning && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <Clock className="w-5 h-5 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">{t.offline}</p>
+              <p className="text-sm text-amber-700">{t.offlineDesc}</p>
+            </div>
+            <button
+              onClick={() =>
+                (window.location.href =
+                  "/provider/dashboard?section=availability")
+              }
+              className="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm cursor-pointer"
+            >
+              {t.goOnline}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4">
@@ -476,39 +695,34 @@ export default function RequestsSection({
             </div>
             <button
               onClick={handleRefresh}
-              className="p-2 hover:bg-gray-100 rounded-lg"
+              className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
               title={t.refresh}
             >
-              <RefreshCw
-                className={`w-5 h-5 text-gray-600 ${
-                  loading ? "animate-spin" : ""
-                }`}
-              />
+              <RefreshCw className="w-5 h-5 text-gray-600" />
             </button>
           </div>
         </div>
 
-        {/* Simple Filter Button */}
+        {/* Filter */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilter(!showFilter)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
           >
             <Filter className="w-4 h-4" />
             {showFilter ? t.hideFilters : t.showFilters}
           </button>
-
           {urgencyFilter !== "all" && (
             <button
               onClick={clearFilter}
-              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 cursor-pointer"
             >
               {t.clearFilter}
             </button>
           )}
         </div>
 
-        {/* Simple Filter Dropdown */}
+        {/* Filter Dropdown */}
         {showFilter && (
           <div className="mt-3 pt-3 border-t">
             <p className="text-sm font-medium text-gray-700 mb-2">
@@ -517,41 +731,25 @@ export default function RequestsSection({
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setUrgencyFilter("all")}
-                className={`px-3 py-2 text-sm rounded-lg border ${
-                  urgencyFilter === "all"
-                    ? "bg-blue-100 border-blue-300 text-blue-700"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
+                className={`px-3 py-2 text-sm rounded-lg border cursor-pointer ${urgencyFilter === "all" ? "bg-blue-100 border-blue-300 text-blue-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
               >
                 {t.allUrgencies}
               </button>
               <button
                 onClick={() => setUrgencyFilter("1h")}
-                className={`px-3 py-2 text-sm rounded-lg border ${
-                  urgencyFilter === "1h"
-                    ? "bg-red-100 border-red-300 text-red-700"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
+                className={`px-3 py-2 text-sm rounded-lg border cursor-pointer ${urgencyFilter === "1h" ? "bg-red-100 border-red-300 text-red-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
               >
                 ⚡ {t.urgent1h}
               </button>
               <button
                 onClick={() => setUrgencyFilter("2h")}
-                className={`px-3 py-2 text-sm rounded-lg border ${
-                  urgencyFilter === "2h"
-                    ? "bg-amber-100 border-amber-300 text-amber-700"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
+                className={`px-3 py-2 text-sm rounded-lg border cursor-pointer ${urgencyFilter === "2h" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
               >
                 🕑 {t.standard2h}
               </button>
               <button
                 onClick={() => setUrgencyFilter("1d")}
-                className={`px-3 py-2 text-sm rounded-lg border ${
-                  urgencyFilter === "1d"
-                    ? "bg-green-100 border-green-300 text-green-700"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                }`}
+                className={`px-3 py-2 text-sm rounded-lg border cursor-pointer ${urgencyFilter === "1d" ? "bg-green-100 border-green-300 text-green-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
               >
                 📅 {t.flexible1d}
               </button>
@@ -564,12 +762,7 @@ export default function RequestsSection({
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <div className="flex items-start gap-3">
           <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-blue-800 mb-1">
-              {lang === "en" ? "Important" : "முக்கியமானது"}
-            </p>
-            <p className="text-sm text-blue-700">{t.privacyNote}</p>
-          </div>
+          <p className="text-sm text-blue-700">{t.privacyNote}</p>
         </div>
       </div>
 
@@ -585,7 +778,7 @@ export default function RequestsSection({
           </p>
           <button
             onClick={handleRefresh}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
             {t.refresh}
@@ -593,20 +786,20 @@ export default function RequestsSection({
         </div>
       ) : (
         <>
-          {/* Requests List */}
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">
               {t.availableRequests}{" "}
               <span className="text-gray-500">({filteredRequests.length})</span>
             </h3>
-
             <div className="space-y-4">
               <AnimatePresence>
                 {filteredRequests.map((request) => {
                   const timeRemaining = calculateTimeRemaining(
-                    request.expiresAt
+                    request.expiresAt,
                   );
                   const isProcessing = processingRequest === request.id;
+                  const hasVoice = !!request.voiceMessageUrl;
+                  const hasImage = !!request.imageUrl;
 
                   return (
                     <motion.div
@@ -616,12 +809,12 @@ export default function RequestsSection({
                       exit={{ opacity: 0 }}
                       className={`bg-white rounded-xl border ${
                         timeRemaining.isUrgent
-                          ? "border-red-200"
+                          ? "border-red-200 bg-red-50/30"
                           : "border-gray-200"
                       } ${timeRemaining.expired ? "opacity-60" : ""}`}
                     >
                       <div className="p-5">
-                        {/* Request Header */}
+                        {/* Header */}
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -641,8 +834,8 @@ export default function RequestsSection({
                               timeRemaining.expired
                                 ? "bg-gray-100 text-gray-700"
                                 : timeRemaining.isUrgent
-                                ? "bg-red-100 text-red-700"
-                                : "bg-blue-100 text-blue-700"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-blue-100 text-blue-700"
                             }`}
                           >
                             {timeRemaining.expired ? (
@@ -660,17 +853,77 @@ export default function RequestsSection({
                         </div>
 
                         {/* Service Description */}
-                        <div className="mb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <MessageSquare className="w-4 h-4 text-gray-500" />
-                            <span className="text-sm font-medium text-gray-700">
-                              {t.serviceDetails}
-                            </span>
+                        {request.description && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <MessageSquare className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm font-medium text-gray-700">
+                                {t.serviceDetails}
+                              </span>
+                            </div>
+                            <p className="text-gray-700 text-sm bg-gray-50 p-3 rounded-lg">
+                              {request.description}
+                            </p>
                           </div>
-                          <p className="text-gray-700 text-sm bg-gray-50 p-3 rounded-lg">
-                            {request.description}
-                          </p>
-                        </div>
+                        )}
+
+                        {/* Media Section - Voice + Photo in a row */}
+                        {(hasVoice || hasImage) && (
+                          <div className="mb-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                              {/* Voice Message */}
+                              {hasVoice && (
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Mic className="w-4 h-4 text-blue-500" />
+                                    <span className="text-xs font-medium text-gray-600">
+                                      {t.voiceMessage}
+                                    </span>
+                                  </div>
+                                  <AudioPlayer
+                                    url={request.voiceMessageUrl!}
+                                    lang={lang}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Photo */}
+                              {hasImage && (
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <ImageIcon className="w-4 h-4 text-green-500" />
+                                    <span className="text-xs font-medium text-gray-600">
+                                      {t.photo}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      setImageModalUrl(request.imageUrl!)
+                                    }
+                                    className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition cursor-pointer"
+                                  >
+                                    <ImageIcon className="w-4 h-4" />
+                                    <span className="text-sm">
+                                      {t.viewImage}
+                                    </span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No Media Indicator */}
+                        {!hasVoice && !hasImage && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2">
+                              <Volume2 className="w-4 h-4 text-gray-400" />
+                              <span className="text-xs text-gray-400">
+                                {t.noMedia}
+                              </span>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Details */}
                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -689,6 +942,7 @@ export default function RequestsSection({
                             <div className="font-medium text-gray-900 flex items-center gap-1">
                               <MapPin className="w-3 h-3" />
                               {request.district}
+                              {request.block && `, ${request.block}`}
                             </div>
                           </div>
                         </div>
@@ -698,9 +952,7 @@ export default function RequestsSection({
                           <div className="flex items-center gap-2">
                             <EyeOff className="w-4 h-4 text-gray-600" />
                             <span className="text-sm text-gray-700">
-                              {lang === "en"
-                                ? "Your phone number will be shared after acceptance"
-                                : "நீங்கள் ஏற்றுக்கொண்ட பிறகு உங்கள் தொலைபேசி எண் பகிரப்படும்"}
+                              {t.privacyNote}
                             </span>
                           </div>
                         </div>
@@ -710,7 +962,7 @@ export default function RequestsSection({
                           <button
                             onClick={() => handleAccept(request.id)}
                             disabled={isProcessing || timeRemaining.expired}
-                            className={`flex-1 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                            className={`flex-1 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer ${
                               timeRemaining.expired
                                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                                 : "bg-green-600 hover:bg-green-700 text-white"
@@ -737,8 +989,7 @@ export default function RequestsSection({
                           <button
                             onClick={() => handleReject(request.id)}
                             disabled={isProcessing}
-                            className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
-                            title={t.decline}
+                            className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 cursor-pointer"
                           >
                             <XCircle className="w-4 h-4" />
                           </button>
@@ -762,7 +1013,7 @@ export default function RequestsSection({
               </p>
               <button
                 onClick={clearFilter}
-                className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200"
+                className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200 cursor-pointer"
               >
                 {t.clearFilter}
               </button>

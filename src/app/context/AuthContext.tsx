@@ -16,8 +16,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
-import { getActualRole, loginWithRole } from "../firebase/authWithRole";
-
+import { getActualRole, loginWithRole } from "../firebase/authWithRole"
 /* ===================== TYPES ===================== */
 
 export interface ProviderData {

@@ -16,6 +16,7 @@ import HomeSection from "./sections/HomeSection";
 import MyRequestsSection from "./sections/MyRequests";
 import HistorySection from "./sections/History";
 import ProfileSection from "./sections/Profile";
+import NotificationDropdown from "../../../components/NotificationDropdonw";
 
 /* Type Definitions */
 type SectionType = "home" | "requests" | "history" | "profile";
@@ -46,9 +47,7 @@ const FastLoading = ({ lang }: { lang: "en" | "ta" }) => (
   <div className="min-h-screen bg-gray-50 pt-16">
     <div className="flex-1 p-4 lg:p-6">
       <div className="space-y-6">
-        {/* Header Skeleton */}
         <div className="h-8 bg-gray-200 rounded-lg w-64 animate-pulse" />
-        {/* Content Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
           <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
@@ -64,7 +63,7 @@ export default function SeekerDashboardLayout({
   children: React.ReactNode;
 }) {
   const { lang } = useLanguage();
-  const { user, loading, initialized } = useAuth(); // ADDED initialized
+  const { user, loading, initialized } = useAuth();
   const router = useRouter();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -73,7 +72,7 @@ export default function SeekerDashboardLayout({
   const [addressLoading, setAddressLoading] = useState(false);
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
 
-  /* 🔐 FIXED AUTH CHECK - Wait for BOTH loading to finish AND initialized */
+  /* Auth check */
   useEffect(() => {
     if (loading || !initialized) return;
 
@@ -81,14 +80,13 @@ export default function SeekerDashboardLayout({
       "Auth check complete - Loading:",
       loading,
       "Initialized:",
-      initialized
+      initialized,
     );
     console.log("Auth check - User:", user);
     console.log("Auth check - User Role:", user?.role);
 
     setAuthCheckComplete(true);
 
-    // Only redirect if we're sure there's no user after loading AND initialization
     if (!user) {
       console.log("No user found after initialization, redirecting to login");
       router.push("/seeker/login");
@@ -104,7 +102,7 @@ export default function SeekerDashboardLayout({
     console.log("Auth successful, user is seeker");
   }, [user, loading, initialized, router]);
 
-  /* 📍 Load seeker address */
+  /* Load seeker address */
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -132,7 +130,7 @@ export default function SeekerDashboardLayout({
     loadAddress();
   }, [user?.uid]);
 
-  /* 🧠 SINGLE-PAGE SECTION SWITCH */
+  /* Single-page section switch */
   const CurrentSection = useMemo(() => {
     switch (activeSection) {
       case "home":
@@ -153,21 +151,18 @@ export default function SeekerDashboardLayout({
     return <FastLoading lang={lang} />;
   }
 
-  // Don't show anything if redirecting (should have redirected by now)
+  // Don't show anything if redirecting
   if (!user || user.role !== "seeker") {
     return <FastLoading lang={lang} />;
   }
 
-  // Section title with bilingual support
   const sectionTitle = SECTION_TITLES[lang][activeSection];
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      {/* Main container */}
       <div className="flex">
-        {/* Sidebar - Now at same level as content */}
         <Sidebar
           active={activeSection}
           onChange={(section) => setActiveSection(section as SectionType)}
@@ -175,18 +170,16 @@ export default function SeekerDashboardLayout({
           setSidebarOpen={setSidebarOpen}
         />
 
-        {/* Main Content */}
         <main
           className={`
             flex-1 min-h-screen
             transition-all duration-300
             ${sidebarOpen ? "ml-64" : "ml-0 lg:ml-64"}
-            pt-16 /* ADDED: Push content below navbar */
+            pt-16
           `}
         >
-          {/* Content wrapper - REMOVED pt-16 from here */}
           <div className="p-4 lg:p-6">
-            {/* Header */}
+            {/* Header with Notification Bell */}
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -194,6 +187,7 @@ export default function SeekerDashboardLayout({
               className="mb-6"
             >
               <div className="flex flex-col md:flex-row justify-between gap-4">
+                {/* Left: Title */}
                 <div className="flex-1 min-w-0">
                   <h1
                     className="text-2xl font-bold text-gray-800 capitalize truncate"
@@ -229,7 +223,9 @@ export default function SeekerDashboardLayout({
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 flex-shrink-0">
+                {/* ✅ Right side - Controls (Menu + Notification) - Bell always on RIGHT */}
+                <div className="flex items-center justify-end gap-3 flex-shrink-0">
+                  {/* Mobile Menu Button - Shows on mobile only */}
                   <button
                     onClick={() => setSidebarOpen(!sidebarOpen)}
                     className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -240,6 +236,9 @@ export default function SeekerDashboardLayout({
                       <Menu className="w-6 h-6 text-gray-600" />
                     )}
                   </button>
+
+                  {/* ✅ Notification Bell - Always on RIGHT side */}
+                  {user?.uid && <NotificationDropdown userId={user.uid} />}
                 </div>
               </div>
             </motion.div>
@@ -249,7 +248,6 @@ export default function SeekerDashboardLayout({
               <CurrentSection />
             </div>
 
-            {/* Render children */}
             {children}
           </div>
         </main>

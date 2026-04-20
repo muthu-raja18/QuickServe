@@ -8,15 +8,22 @@ import { useAuth } from "../../context/AuthContext";
 import Notification from "../../components/Notification";
 import { Eye, EyeOff, Home } from "lucide-react";
 import { auth, db } from "../../firebase/config";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 export default function ProviderLoginPage() {
   const router = useRouter();
   const { lang } = useLanguage();
-  const { user, loading, initialized, manualSetUser } = useAuth();
+  const { user, loading, initialized, manualSetUser, refreshUser } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState(""); // email or phone
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [notif, setNotif] = useState<{
@@ -38,35 +45,88 @@ export default function ProviderLoginPage() {
           const providerDoc = await getDoc(doc(db, "providers", user.uid));
           if (providerDoc.exists()) {
             const providerData = providerDoc.data();
-
             if (providerData.status === "approved") {
-              // Already logged in and approved - go to dashboard
               router.push("/provider/dashboard");
             } else if (providerData.status === "pending") {
-              // Already logged in but pending - go to waiting
               router.push("/provider/waiting");
             }
-            // If rejected, stay on login page
           }
         } catch (error) {
           console.error("Auto-redirect error:", error);
         }
       }
     };
-
     checkAndRedirect();
   }, [user, loading, initialized, router]);
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  // Resolve identifier (email or phone) to actual email
+  const resolveIdentifierToEmail = async (
+    input: string,
+  ): Promise<string | null> => {
+    const trimmed = input.trim().toLowerCase();
+
+    // Check if input is email format
+    const isEmailFormat = /^\S+@\S+\.\S+$/.test(trimmed);
+    if (isEmailFormat) {
+      console.log("📧 Checking as email...");
+      // Check in providers collection
+      const providersRef = collection(db, "providers");
+      const q = query(providersRef, where("email", "==", trimmed));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const email = snap.docs[0].data().email;
+        console.log("✅ Found email in providers:", email);
+        return email;
+      }
+      // Also check users collection
+      const usersRef = collection(db, "users");
+      const userQuery = query(usersRef, where("email", "==", trimmed));
+      const userSnap = await getDocs(userQuery);
+      if (!userSnap.empty) {
+        const email = userSnap.docs[0].data().email;
+        console.log("✅ Found email in users:", email);
+        return email;
+      }
+      return null;
+    }
+
+    // Check if input is phone number (10 digits)
+    const isPhoneFormat = /^\d{10}$/.test(trimmed);
+    if (isPhoneFormat) {
+      console.log("📱 Checking as phone number...");
+      // Check in providers collection
+      const providersRef = collection(db, "providers");
+      const q = query(providersRef, where("phone", "==", trimmed));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const email = snap.docs[0].data().email;
+        console.log("✅ Found email by phone in providers:", email);
+        return email;
+      }
+      // Check in users collection
+      const usersRef = collection(db, "users");
+      const userQuery = query(usersRef, where("phone", "==", trimmed));
+      const userSnap = await getDocs(userQuery);
+      if (!userSnap.empty) {
+        const email = userSnap.docs[0].data().email;
+        console.log("✅ Found email by phone in users:", email);
+        return email;
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Basic validation
-    if (!email || !password) {
+    if (!identifier || !password) {
       setNotif({
         message:
           lang === "en"
-            ? "Please enter email and password"
-            : "மின்னஞ்சல் மற்றும் கடவுச்சொல்லை உள்ளிடவும்",
+            ? "Please enter email/phone and password"
+            : "மின்னஞ்சல்/தொலைபேசி மற்றும் கடவுச்சொல்லை உள்ளிடவும்",
         type: "error",
       });
       return;
@@ -75,30 +135,46 @@ export default function ProviderLoginPage() {
     setFormLoading(true);
 
     try {
-      // 1. Sign in with Firebase Auth
+      // Resolve identifier to email
+      const resolvedEmail = await resolveIdentifierToEmail(identifier);
+
+      if (!resolvedEmail) {
+        setNotif({
+          message:
+            lang === "en"
+              ? "No account found with this email/phone. Please sign up first."
+              : "இந்த மின்னஞ்சல்/தொலைபேசியுடன் கணக்கு இல்லை. தயவுசெய்து முதலில் பதிவு செய்யவும்.",
+          type: "error",
+        });
+        setFormLoading(false);
+        return;
+      }
+
+      console.log(`🔐 Attempting login with resolved email: ${resolvedEmail}`);
+
+      // Sign in with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        email,
-        password
+        resolvedEmail,
+        password,
       );
       const currentUser = userCredential.user;
 
-      // 2. Check if provider document exists
+      // Check if provider document exists
       const providerDoc = await getDoc(doc(db, "providers", currentUser.uid));
 
       if (!providerDoc.exists()) {
-        // Provider document doesn't exist
-        await auth.signOut(); // Sign out since not a provider
+        await auth.signOut();
         throw new Error(
           lang === "en"
             ? "Provider account not found. Please sign up as a provider."
-            : "சேவை வழங்குநர் கணக்கு கிடைக்கவில்லை. சேவை வழங்குநராக பதிவு செய்யவும்"
+            : "சேவை வழங்குநர் கணக்கு கிடைக்கவில்லை. சேவை வழங்குநராக பதிவு செய்யவும்",
         );
       }
 
       const providerData = providerDoc.data();
 
-      // 3. Update AuthContext with user data
+      // Update AuthContext
       if (manualSetUser) {
         manualSetUser({
           uid: currentUser.uid,
@@ -107,23 +183,19 @@ export default function ProviderLoginPage() {
         });
       }
 
-      // 4. Store role in localStorage
       localStorage.setItem("userRole", "provider");
+      await refreshUser();
 
-      // 5. Route based on approval status
+      // Route based on approval status
       if (providerData.status === "approved") {
-        // ✅ APPROVED - Go to dashboard
         setNotif({
           message: lang === "en" ? "Login successful!" : "உள்நுழைவு வெற்றி!",
           type: "success",
         });
-
         setTimeout(() => {
           router.push("/provider/dashboard");
-          router.refresh(); // Refresh to update auth state
         }, 800);
       } else if (providerData.status === "pending") {
-        // ⏳ PENDING - Go to waiting page
         setNotif({
           message:
             lang === "en"
@@ -131,13 +203,10 @@ export default function ProviderLoginPage() {
               : "உங்கள் கணக்கு நிர்வாக ஒப்புதலுக்காக காத்திருக்கிறது. காத்திருக்கும் பக்கத்திற்கு திருப்பி விடப்படுகிறது.",
           type: "info",
         });
-
         setTimeout(() => {
           router.push("/provider/waiting");
-          router.refresh(); // Refresh to update auth state
         }, 800);
       } else if (providerData.status === "rejected") {
-        // ❌ REJECTED - Show error
         setNotif({
           message:
             lang === "en"
@@ -145,33 +214,22 @@ export default function ProviderLoginPage() {
               : "உங்கள் கணக்கு நிராகரிக்கப்பட்டது. மேலும் தகவலுக்கு நிர்வாகியை தொடர்பு கொள்ளவும்.",
           type: "error",
         });
-        // Stay on login page - user can logout and try another account
-      } else {
-        // Unknown status
-        setNotif({
-          message:
-            lang === "en"
-              ? "Account status unknown. Please contact support."
-              : "கணக்கு நிலை தெரியவில்லை. ஆதரவைத் தொடர்பு கொள்ளவும்.",
-          type: "error",
-        });
       }
     } catch (error: any) {
       console.error("Provider login error:", error);
 
-      // Handle specific Firebase errors
       let errorMessage = lang === "en" ? "Login failed" : "உள்நுழைவு தோல்வி";
 
       if (error.code === "auth/invalid-credential") {
         errorMessage =
           lang === "en"
-            ? "Invalid email or password"
-            : "தவறான மின்னஞ்சல் அல்லது கடவுச்சொல்";
+            ? "Invalid email/phone or password"
+            : "தவறான மின்னஞ்சல்/தொலைபேசி அல்லது கடவுச்சொல்";
       } else if (error.code === "auth/user-not-found") {
         errorMessage =
           lang === "en"
-            ? "No account found with this email"
-            : "இந்த மின்னஞ்சலுடன் கணக்கு கிடைக்கவில்லை";
+            ? "No account found with this email/phone"
+            : "இந்த மின்னஞ்சல்/தொலைபேசியுடன் கணக்கு கிடைக்கவில்லை";
       } else if (error.code === "auth/wrong-password") {
         errorMessage =
           lang === "en" ? "Incorrect password" : "தவறான கடவுச்சொல்";
@@ -184,18 +242,13 @@ export default function ProviderLoginPage() {
         errorMessage = error.message;
       }
 
-      setNotif({
-        message: errorMessage,
-        type: "error",
-      });
+      setNotif({ message: errorMessage, type: "error" });
     } finally {
       setFormLoading(false);
     }
   };
 
-  const goToHome = () => {
-    router.push("/");
-  };
+  const goToHome = () => router.push("/");
 
   if (!isMounted) {
     return (
@@ -205,7 +258,6 @@ export default function ProviderLoginPage() {
     );
   }
 
-  // If still checking auth state, show loading
   if (loading && !initialized) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
@@ -216,10 +268,7 @@ export default function ProviderLoginPage() {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex flex-col">
-      {/* Spacing from Navbar */}
       <div className="h-16 flex-shrink-0"></div>
-
-      {/* Centered content */}
       <div className="flex-1 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -227,9 +276,7 @@ export default function ProviderLoginPage() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="w-full max-w-sm"
         >
-          {/* Card Container */}
           <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200">
-            {/* Header Section with GREEN Theme */}
             <div className="bg-gradient-to-r from-green-600 to-emerald-700 p-4 text-center">
               <h1 className="text-xl font-bold text-white">QuickServe</h1>
               <h2 className="text-base font-semibold text-green-100 mt-1">
@@ -242,9 +289,7 @@ export default function ProviderLoginPage() {
               </p>
             </div>
 
-            {/* Form Section */}
             <div className="p-5">
-              {/* Show info if already logged in */}
               {!loading && user?.role === "provider" && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
@@ -255,25 +300,33 @@ export default function ProviderLoginPage() {
                 </div>
               )}
 
-              <form onSubmit={handleEmailLogin} className="space-y-4">
-                {/* Email Input */}
+              <form onSubmit={handleLogin} className="space-y-4">
+                {/* Email / Phone Input */}
                 <div className="space-y-1">
                   <label className="block text-xs font-medium text-gray-700">
-                    {lang === "en" ? "Email" : "மின்னஞ்சல்"} *
+                    {lang === "en"
+                      ? "Email or Phone Number"
+                      : "மின்னஞ்சல் அல்லது தொலைபேசி எண்"}{" "}
+                    *
                   </label>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     placeholder={
                       lang === "en"
-                        ? "Enter your email"
-                        : "உங்கள் மின்னஞ்சலை உள்ளிடவும்"
+                        ? "Enter your email or phone number"
+                        : "உங்கள் மின்னஞ்சல் அல்லது தொலைபேசி எண்ணை உள்ளிடவும்"
                     }
                     disabled={formLoading}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {lang === "en"
+                      ? "Use email address or 10-digit phone number"
+                      : "மின்னஞ்சல் முகவரி அல்லது 10-இலக்க தொலைபேசி எண்ணைப் பயன்படுத்தவும்"}
+                  </p>
                 </div>
 
                 {/* Password Input */}
@@ -293,17 +346,13 @@ export default function ProviderLoginPage() {
                       }
                       disabled={formLoading}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 hover:border-green-400 cursor-text pr-10"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-sm disabled:bg-gray-100 pr-10"
                     />
-                    {/* Eye Icon with hover hand cursor */}
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       disabled={formLoading}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 disabled:text-gray-400 cursor-pointer active:bg-green-100 active:scale-95"
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 cursor-pointer active:bg-green-100 active:scale-95"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -314,15 +363,15 @@ export default function ProviderLoginPage() {
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm shadow-md hover:shadow-lg cursor-pointer"
+                  className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed text-sm shadow-md hover:shadow-lg cursor-pointer"
                 >
                   {formLoading
                     ? lang === "en"
                       ? "Logging in..."
                       : "உள்நுழைகிறது..."
                     : lang === "en"
-                    ? "Sign In"
-                    : "உள்நுழைய"}
+                      ? "Sign In"
+                      : "உள்நுழைய"}
                 </button>
 
                 {/* Back to Home Button */}
@@ -330,7 +379,7 @@ export default function ProviderLoginPage() {
                   type="button"
                   onClick={goToHome}
                   disabled={formLoading}
-                  className="w-full bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 active:from-green-300 active:to-emerald-300 text-green-700 border border-green-200 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:border-green-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow cursor-pointer"
+                  className="w-full bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 active:from-green-300 active:to-emerald-300 text-green-700 border border-green-200 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   <Home className="w-4 h-4" />
                   {lang === "en" ? "Back to Home" : "முகப்புக்குத் திரும்பு"}
@@ -347,7 +396,7 @@ export default function ProviderLoginPage() {
                       !formLoading && router.push("/provider/signup")
                     }
                     disabled={formLoading}
-                    className="text-green-600 hover:text-green-700 active:text-green-800 font-medium underline hover:no-underline disabled:text-gray-500 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+                    className="text-green-600 hover:text-green-700 font-medium underline transition-all duration-200 cursor-pointer hover:scale-105"
                   >
                     {lang === "en" ? "Sign up here" : "இங்கே பதிவு செய்யவும்"}
                   </button>
@@ -365,10 +414,8 @@ export default function ProviderLoginPage() {
         </motion.div>
       </div>
 
-      {/* Bottom spacing */}
       <div className="h-4 flex-shrink-0"></div>
 
-      {/* Notification */}
       {notif && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm px-4">
           <Notification
