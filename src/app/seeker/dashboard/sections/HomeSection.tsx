@@ -185,7 +185,7 @@ const convertTo12Hour = (time24: string): string => {
   }
 };
 
-// ✅ FIXED: Upload blob to Cloudinary with better error handling
+// Upload blob to Cloudinary
 const uploadBlobToCloudinary = async (
   blob: Blob,
   resourceType: "image" | "auto",
@@ -212,10 +212,6 @@ const uploadBlobToCloudinary = async (
 
     const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType === "image" ? "image" : "video"}/upload`;
 
-    console.log("📤 Uploading to Cloudinary:", uploadUrl);
-    console.log("📦 File size:", blob.size, "bytes");
-    console.log("🔧 Resource type:", resourceType);
-
     fetch(uploadUrl, {
       method: "POST",
       body: formData,
@@ -229,7 +225,6 @@ const uploadBlobToCloudinary = async (
           );
         }
         if (data.secure_url) {
-          console.log("✅ Upload successful:", data.secure_url);
           resolve(data.secure_url);
         } else {
           reject(new Error("No secure_url in response"));
@@ -1020,7 +1015,7 @@ export default function HomeSection() {
     searchQuery,
   ]);
 
-  // ✅ FIXED: Voice recording with better error handling
+  // Voice recording functions
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1096,11 +1091,64 @@ export default function HomeSection() {
     }
   };
 
-  // ✅ FIXED: Image upload to Cloudinary
-  const handleImageUpload = () => {
+  // ✅ FIXED: Camera access - uses 'capture' attribute for direct camera
+  const handleTakePhoto = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
+    // ✅ CRITICAL FIX: 'capture' attribute opens camera directly on mobile
+    input.setAttribute("capture", "environment");
+
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      if (file.size > 5 * 1024 * 1024) {
+        setNotif({
+          message:
+            lang === "en"
+              ? "Image too large (max 5MB)"
+              : "படம் மிகப்பெரியது (அதிகபட்சம் 5MB)",
+          type: "error",
+        });
+        return;
+      }
+
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+      setImageUploading(true);
+
+      try {
+        const uploadedUrl = await uploadBlobToCloudinary(file, "image");
+        setImageUploadedUrl(uploadedUrl);
+        setNotif({
+          message: lang === "en" ? "Image uploaded!" : "படம் பதிவேற்றப்பட்டது!",
+          type: "success",
+        });
+      } catch (err: any) {
+        console.error("Image upload failed:", err);
+        setNotif({
+          message:
+            lang === "en"
+              ? `Image upload failed: ${err.message}`
+              : `படம் பதிவேற்றம் தோல்வி: ${err.message}`,
+          type: "error",
+        });
+        setImagePreview(null);
+      } finally {
+        setImageUploading(false);
+      }
+    };
+
+    input.click();
+  };
+
+  // Gallery upload (opens file picker)
+  const handleUploadFromGallery = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    // No capture attribute - opens gallery/file picker
 
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
@@ -1285,7 +1333,7 @@ export default function HomeSection() {
     return lang === "en" ? `${hours} hours` : `${hours} மணி நேரம்`;
   };
 
-  // Provider Card Component
+  // Provider Card Component - Fixed for mobile
   const ProviderCard = ({ provider }: { provider: Provider }) => {
     const canRequest =
       provider.availability &&
@@ -1297,7 +1345,7 @@ export default function HomeSection() {
         : null;
 
     return (
-      <div className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 flex flex-col h-full overflow-hidden cursor-pointer">
+      <div className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 flex flex-col h-full overflow-hidden cursor-pointer w-full">
         <div className="p-4 flex-1 flex flex-col">
           <div className="flex items-start gap-3 mb-3">
             <div className="relative w-12 h-12 flex-shrink-0">
@@ -1473,27 +1521,27 @@ export default function HomeSection() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
+    <div className="space-y-6 overflow-x-hidden">
+      {/* Header Section - Fixed overflow */}
       <div className="bg-gradient-to-r from-blue-50 to-white rounded-2xl border border-blue-100 p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center gap-4 mb-3 flex-wrap">
               <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex-shrink-0">
                 <MapPin className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold text-gray-900 truncate">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">
                   {lang === "en"
                     ? "Find Service Providers"
                     : "சேவை வழங்குநர்களைக் கண்டறியவும்"}
                 </h1>
                 {seekerAddress?.district ? (
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
                     <span className="text-gray-600 text-sm whitespace-nowrap">
                       {lang === "en" ? "Your location:" : "உங்கள் இடம்:"}
                     </span>
-                    <span className="px-3 py-1.5 bg-blue-100 text-blue-800 text-sm font-medium rounded-full truncate max-w-[200px]">
+                    <span className="px-3 py-1.5 bg-blue-100 text-blue-800 text-sm font-medium rounded-full break-words max-w-full">
                       {getDistrictName(seekerAddress.district)}
                       {seekerAddress.block && (
                         <span className="text-blue-600">
@@ -1512,7 +1560,7 @@ export default function HomeSection() {
               </div>
             </div>
           </div>
-          <div className="flex-1 max-w-lg min-w-[300px]">
+          <div className="flex-1 max-w-lg min-w-[250px] w-full">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -1531,8 +1579,8 @@ export default function HomeSection() {
         </div>
       </div>
 
-      {/* Filters Section */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+      {/* Filters Section - Fixed mobile layout */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 shadow-sm overflow-x-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">
@@ -1558,14 +1606,16 @@ export default function HomeSection() {
             )}
             <button
               onClick={handleResetFilters}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center gap-2 transition cursor-pointer"
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
             >
               <X className="w-4 h-4" />
               {lang === "en" ? "Clear All" : "அனைத்தையும் அழி"}
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        {/* Filters grid - responsive */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
               {lang === "en" ? "District" : "மாவட்டம்"}
@@ -1762,7 +1812,7 @@ export default function HomeSection() {
         {!loading && filteredProviders.length > 0 && (
           <button
             onClick={refreshAllProviders}
-            className="px-4 py-2 text-blue-600 hover:text-blue-700 text-sm flex items-center gap-2 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+            className="px-4 py-2 text-blue-600 hover:text-blue-700 text-sm flex items-center gap-2 hover:bg-blue-50 rounded-lg transition cursor-pointer whitespace-nowrap"
           >
             <RefreshCw className="w-4 h-4" />
             {lang === "en" ? "Refresh Results" : "முடிவுகளை புதுப்பிக்கவும்"}
@@ -1770,9 +1820,9 @@ export default function HomeSection() {
         )}
       </div>
 
-      {/* Providers Grid */}
+      {/* Providers Grid - Fixed mobile: 1 column on mobile */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-5">
           {Array(6)
             .fill(0)
             .map((_, i) => (
@@ -1789,7 +1839,7 @@ export default function HomeSection() {
               ? "No providers found"
               : "வழங்குநர்கள் கிடைக்கவில்லை"}
           </h3>
-          <p className="text-gray-600 mb-8 max-w-md mx-auto">
+          <p className="text-gray-600 mb-8 max-w-md mx-auto px-4">
             {lang === "en"
               ? "Try adjusting your filters or search terms to find what you're looking for."
               : "நீங்கள் தேடுவதைக் கண்டுபிடிக்க உங்கள் வடிப்பான்கள் அல்லது தேடல் விதிமுறைகளை மாற்றவும்."}
@@ -1832,7 +1882,7 @@ export default function HomeSection() {
         />
       )}
 
-      {/* Request Modal */}
+      {/* Request Modal - Fixed mobile */}
       <AnimatePresence>
         {showRequestModal && selectedProvider && (
           <motion.div
@@ -1855,7 +1905,7 @@ export default function HomeSection() {
               onClick={(e) => e.stopPropagation()}
               className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto cursor-default"
             >
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {/* Modal Header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="min-w-0">
@@ -1876,7 +1926,7 @@ export default function HomeSection() {
                       deleteRecording();
                       removeImage();
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-xl transition cursor-pointer"
+                    className="p-2 hover:bg-gray-100 rounded-xl transition cursor-pointer flex-shrink-0"
                   >
                     <X className="w-5 h-5 text-gray-500" />
                   </button>
@@ -2036,7 +2086,7 @@ export default function HomeSection() {
                     )}
                   </div>
 
-                  {/* IMAGE UPLOAD - ALWAYS VISIBLE */}
+                  {/* IMAGE UPLOAD - ALWAYS VISIBLE with separate Camera and Gallery buttons */}
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
                       {lang === "en" ? "Photo" : "புகைப்படம்"}
@@ -2060,10 +2110,11 @@ export default function HomeSection() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        {/* Upload from Gallery Button */}
                         <button
                           type="button"
-                          onClick={handleImageUpload}
+                          onClick={handleUploadFromGallery}
                           disabled={imageUploading}
                           className="flex-1 flex flex-col items-center justify-center py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 transition cursor-pointer"
                         >
@@ -2074,8 +2125,8 @@ export default function HomeSection() {
                               <Image className="w-8 h-8 text-gray-400 mb-2" />
                               <p className="text-sm text-gray-500">
                                 {lang === "en"
-                                  ? "Upload Photo"
-                                  : "புகைப்படத்தை பதிவேற்று"}
+                                  ? "Upload from Gallery"
+                                  : "கேலரியில் இருந்து பதிவேற்று"}
                               </p>
                               <p className="text-xs text-gray-400">
                                 {lang === "en"
@@ -2085,9 +2136,10 @@ export default function HomeSection() {
                             </>
                           )}
                         </button>
+                        {/* Take Photo Button - Opens Camera directly */}
                         <button
                           type="button"
-                          onClick={handleImageUpload}
+                          onClick={handleTakePhoto}
                           disabled={imageUploading}
                           className="flex-1 flex flex-col items-center justify-center py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 transition cursor-pointer"
                         >
