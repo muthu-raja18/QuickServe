@@ -185,56 +185,51 @@ const convertTo12Hour = (time24: string): string => {
   }
 };
 
-// Upload blob to Cloudinary
-const uploadBlobToCloudinary = async (
-  blob: Blob,
-  resourceType: "image" | "auto",
-): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+// ==================== FIXED CLOUDINARY UPLOAD ====================
+const uploadFileToCloudinary = async (file: File | Blob): Promise<string> => {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-    if (!cloudName || !uploadPreset) {
-      reject(
-        new Error("Cloudinary credentials missing. Check your .env.local file"),
-      );
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", uploadPreset);
-    formData.append("cloud_name", cloudName);
-    formData.append(
-      "resource_type",
-      resourceType === "image" ? "image" : "auto",
+  if (!cloudName || !uploadPreset) {
+    throw new Error(
+      "Cloudinary credentials missing. Check your .env.local file",
     );
+  }
 
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType === "image" ? "image" : "video"}/upload`;
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+  formData.append("cloud_name", cloudName);
 
-    fetch(uploadUrl, {
-      method: "POST",
-      body: formData,
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) {
-          console.error("❌ Cloudinary error response:", data);
-          throw new Error(
-            data.error?.message || `Upload failed with status ${res.status}`,
-          );
-        }
-        if (data.secure_url) {
-          resolve(data.secure_url);
-        } else {
-          reject(new Error("No secure_url in response"));
-        }
-      })
-      .catch((err) => {
-        console.error("❌ Fetch error:", err);
-        reject(err);
-      });
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+  console.log("📤 Uploading to Cloudinary...");
+  console.log("🔗 URL:", uploadUrl);
+  if (file instanceof File) {
+    console.log("📁 File name:", file.name);
+    console.log("📦 File size:", file.size, "bytes");
+  }
+
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    body: formData,
   });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("❌ Cloudinary error:", data);
+    throw new Error(
+      data.error?.message || `Upload failed with status ${response.status}`,
+    );
+  }
+
+  if (!data.secure_url) {
+    throw new Error("No secure_url in response");
+  }
+
+  console.log("✅ Upload successful:", data.secure_url);
+  return data.secure_url;
 };
 
 // ==================== STAR RATING COMPONENT ====================
@@ -1015,7 +1010,7 @@ export default function HomeSection() {
     searchQuery,
   ]);
 
-  // Voice recording functions
+  // ==================== FIXED VOICE RECORDING ====================
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1035,13 +1030,13 @@ export default function HomeSection() {
 
         setVoiceUploading(true);
         try {
-          const uploadedUrl = await uploadBlobToCloudinary(blob, "auto");
+          const uploadedUrl = await uploadFileToCloudinary(blob);
           setVoiceUploadedUrl(uploadedUrl);
           setNotif({
             message:
               lang === "en"
-                ? "Voice uploaded successfully!"
-                : "குரல் வெற்றிகரமாக பதிவேற்றப்பட்டது!",
+                ? "✅ Voice uploaded successfully!"
+                : "✅ குரல் வெற்றிகரமாக பதிவேற்றப்பட்டது!",
             type: "success",
           });
         } catch (err: any) {
@@ -1091,12 +1086,11 @@ export default function HomeSection() {
     }
   };
 
-  // ✅ FIXED: Camera access - uses 'capture' attribute for direct camera
+  // ==================== FIXED CAMERA ACCESS ====================
   const handleTakePhoto = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
-    // ✅ CRITICAL FIX: 'capture' attribute opens camera directly on mobile
     input.setAttribute("capture", "environment");
 
     input.onchange = async (e) => {
@@ -1119,10 +1113,11 @@ export default function HomeSection() {
       setImageUploading(true);
 
       try {
-        const uploadedUrl = await uploadBlobToCloudinary(file, "image");
+        const uploadedUrl = await uploadFileToCloudinary(file);
         setImageUploadedUrl(uploadedUrl);
         setNotif({
-          message: lang === "en" ? "Image uploaded!" : "படம் பதிவேற்றப்பட்டது!",
+          message:
+            lang === "en" ? "✅ Image uploaded!" : "✅ படம் பதிவேற்றப்பட்டது!",
           type: "success",
         });
       } catch (err: any) {
@@ -1135,6 +1130,7 @@ export default function HomeSection() {
           type: "error",
         });
         setImagePreview(null);
+        setImageUploadedUrl(null);
       } finally {
         setImageUploading(false);
       }
@@ -1143,12 +1139,11 @@ export default function HomeSection() {
     input.click();
   };
 
-  // Gallery upload (opens file picker)
+  // ==================== FIXED GALLERY UPLOAD ====================
   const handleUploadFromGallery = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
-    // No capture attribute - opens gallery/file picker
 
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
@@ -1170,10 +1165,11 @@ export default function HomeSection() {
       setImageUploading(true);
 
       try {
-        const uploadedUrl = await uploadBlobToCloudinary(file, "image");
+        const uploadedUrl = await uploadFileToCloudinary(file);
         setImageUploadedUrl(uploadedUrl);
         setNotif({
-          message: lang === "en" ? "Image uploaded!" : "படம் பதிவேற்றப்பட்டது!",
+          message:
+            lang === "en" ? "✅ Image uploaded!" : "✅ படம் பதிவேற்றப்பட்டது!",
           type: "success",
         });
       } catch (err: any) {
@@ -1186,6 +1182,7 @@ export default function HomeSection() {
           type: "error",
         });
         setImagePreview(null);
+        setImageUploadedUrl(null);
       } finally {
         setImageUploading(false);
       }
@@ -1333,7 +1330,7 @@ export default function HomeSection() {
     return lang === "en" ? `${hours} hours` : `${hours} மணி நேரம்`;
   };
 
-  // Provider Card Component - Fixed for mobile
+  // Provider Card Component
   const ProviderCard = ({ provider }: { provider: Provider }) => {
     const canRequest =
       provider.availability &&
@@ -1522,7 +1519,7 @@ export default function HomeSection() {
 
   return (
     <div className="space-y-6 overflow-x-hidden">
-      {/* Header Section - Fixed overflow */}
+      {/* Header Section */}
       <div className="bg-gradient-to-r from-blue-50 to-white rounded-2xl border border-blue-100 p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex-1 min-w-0">
@@ -1579,7 +1576,7 @@ export default function HomeSection() {
         </div>
       </div>
 
-      {/* Filters Section - Fixed mobile layout */}
+      {/* Filters Section */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 shadow-sm overflow-x-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -1614,8 +1611,8 @@ export default function HomeSection() {
           </div>
         </div>
 
-        {/* Filters grid - responsive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* District */}
           <div className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
               {lang === "en" ? "District" : "மாவட்டம்"}
@@ -1638,6 +1635,8 @@ export default function HomeSection() {
               <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* Service Type */}
           <div className="min-w-0" ref={serviceDropdownRef}>
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
               {lang === "en" ? "Service Type" : "சேவை வகை"}
@@ -1733,6 +1732,8 @@ export default function HomeSection() {
               )}
             </div>
           </div>
+
+          {/* Minimum Rating */}
           <div className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-2 whitespace-nowrap">
               {lang === "en" ? "Minimum Rating" : "குறைந்தபட்ச மதிப்பீடு"}
@@ -1750,6 +1751,8 @@ export default function HomeSection() {
               ))}
             </select>
           </div>
+
+          {/* Available now toggle */}
           <div className="flex flex-col justify-end">
             <div className="flex items-center gap-3 h-12">
               <button
@@ -1820,7 +1823,7 @@ export default function HomeSection() {
         )}
       </div>
 
-      {/* Providers Grid - Fixed mobile: 1 column on mobile */}
+      {/* Providers Grid */}
       {loading ? (
         <div className="grid grid-cols-1 gap-5">
           {Array(6)
@@ -1882,7 +1885,7 @@ export default function HomeSection() {
         />
       )}
 
-      {/* Request Modal - Fixed mobile */}
+      {/* Request Modal */}
       <AnimatePresence>
         {showRequestModal && selectedProvider && (
           <motion.div
@@ -1991,7 +1994,7 @@ export default function HomeSection() {
                 </div>
 
                 <div className="space-y-5">
-                  {/* Service Description - Optional */}
+                  {/* Service Description */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2 whitespace-nowrap">
                       {lang === "en" ? "Service Description" : "சேவை விளக்கம்"}{" "}
@@ -2012,7 +2015,7 @@ export default function HomeSection() {
                     />
                   </div>
 
-                  {/* VOICE RECORDING - ALWAYS VISIBLE */}
+                  {/* VOICE RECORDING */}
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
                       {lang === "en" ? "Voice Message" : "குரல் செய்தி"}
@@ -2086,7 +2089,7 @@ export default function HomeSection() {
                     )}
                   </div>
 
-                  {/* IMAGE UPLOAD - ALWAYS VISIBLE with separate Camera and Gallery buttons */}
+                  {/* IMAGE UPLOAD */}
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
                       {lang === "en" ? "Photo" : "புகைப்படம்"}
@@ -2111,7 +2114,6 @@ export default function HomeSection() {
                       </div>
                     ) : (
                       <div className="flex flex-col sm:flex-row gap-3">
-                        {/* Upload from Gallery Button */}
                         <button
                           type="button"
                           onClick={handleUploadFromGallery}
@@ -2136,7 +2138,6 @@ export default function HomeSection() {
                             </>
                           )}
                         </button>
-                        {/* Take Photo Button - Opens Camera directly */}
                         <button
                           type="button"
                           onClick={handleTakePhoto}

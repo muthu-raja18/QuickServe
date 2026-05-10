@@ -1,4 +1,4 @@
-// src/app/provider/dashboard/sections/Requests.tsx - FULLY FIXED
+// src/app/provider/dashboard/sections/Requests.tsx - COMPLETE WORKING VERSION
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -113,6 +113,8 @@ const TEXTS = {
     matchingRequests: "Matching Requests",
     noMedia: "No media attached",
     playing: "Playing...",
+    imageAttached: "📷 Image Attached",
+    tapToView: "Tap to view",
   },
   ta: {
     title: "புதிய கோரிக்கைகள்",
@@ -155,6 +157,8 @@ const TEXTS = {
     matchingRequests: "பொருந்தும் கோரிக்கைகள்",
     noMedia: "எந்த மீடியாவும் இணைக்கப்படவில்லை",
     playing: "இயங்குகிறது...",
+    imageAttached: "📷 படம் இணைக்கப்பட்டுள்ளது",
+    tapToView: "பார்க்க தட்டவும்",
   },
 };
 
@@ -226,8 +230,8 @@ const AudioPlayer = ({ url, lang }: { url: string; lang: string }) => {
               : "ஏற்றுகிறது..."
             : isPlaying
               ? lang === "en"
-                ? TEXTS.en.playing
-                : TEXTS.ta.playing
+                ? "Playing..."
+                : "இயங்குகிறது..."
               : lang === "en"
                 ? "Listen"
                 : "கேட்க"}
@@ -350,7 +354,6 @@ export default function RequestsSection({
       } else {
         text = `${minutes}${t.minutes}`;
       }
-
       text += ` ${t.timeLeft}`;
       const isUrgent = diffMs < 30 * 60 * 1000;
 
@@ -359,7 +362,7 @@ export default function RequestsSection({
     [t],
   );
 
-  // Load requests - Direct query for providerId
+  // Load requests - Query by providerId
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
@@ -385,18 +388,31 @@ export default function RequestsSection({
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        console.log("📦 Snapshot size:", snapshot.size);
+        console.log(
+          "📦 Total pending requests for this provider:",
+          snapshot.size,
+        );
 
         const now = Timestamp.now();
         const requestsData: ServiceRequest[] = [];
 
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
-          console.log("📄 Request doc:", doc.id, {
+
+          // Check for image in multiple possible field names
+          let imageField = null;
+          if (data.imageUrl) imageField = data.imageUrl;
+          else if (data.imageURL) imageField = data.imageURL;
+          else if (data.photoUrl) imageField = data.photoUrl;
+          else if (data.photoURL) imageField = data.photoURL;
+          else if (data.photo) imageField = data.photo;
+          else if (data.image) imageField = data.image;
+
+          console.log(`📄 Request ${doc.id}:`, {
             hasVoice: !!data.voiceMessageUrl,
-            hasImage: !!data.imageUrl,
+            hasImage: !!imageField,
+            imageUrl: imageField,
             voiceUrl: data.voiceMessageUrl,
-            imageUrl: data.imageUrl,
           });
 
           // Check if expired
@@ -421,7 +437,7 @@ export default function RequestsSection({
             createdAt: data.createdAt,
             expiresAt: data.expiresAt,
             voiceMessageUrl: data.voiceMessageUrl,
-            imageUrl: data.imageUrl,
+            imageUrl: imageField,
             providerId: data.providerId,
           });
         });
@@ -436,8 +452,15 @@ export default function RequestsSection({
           requestsData.filter((r) => r.imageUrl).length,
         );
 
+        // Log image URLs for debugging
+        requestsData
+          .filter((r) => r.imageUrl)
+          .forEach((r) => {
+            console.log("🖼️ IMAGE URL FOUND:", r.imageUrl);
+          });
+
         setDebugInfo(
-          `Found ${requestsData.length} pending requests | Voice: ${requestsData.filter((r) => r.voiceMessageUrl).length} | Image: ${requestsData.filter((r) => r.imageUrl).length}`,
+          `Found ${requestsData.length} requests | Voice: ${requestsData.filter((r) => r.voiceMessageUrl).length} | Image: ${requestsData.filter((r) => r.imageUrl).length}`,
         );
 
         // Sort by createdAt descending (newest first)
@@ -452,20 +475,7 @@ export default function RequestsSection({
       },
       (queryError: any) => {
         console.error("❌ Error loading requests:", queryError);
-
-        if (queryError.message?.includes("index")) {
-          setError(
-            "Firestore index required. Please create the index using the link in console.",
-          );
-          console.log(
-            "🔗 Create index:",
-            queryError.message.match(
-              /https:\/\/console\.firebase\.google\.com[^\s]+/,
-            )?.[0],
-          );
-        } else {
-          setError(t.loadingError);
-        }
+        setError(t.loadingError);
         setLoading(false);
       },
     );
@@ -652,6 +662,16 @@ export default function RequestsSection({
                 📍 {t.matchingRequests}: {requests.length}
               </p>
               <p>💬 {debugInfo}</p>
+              {requests
+                .filter((r) => r.imageUrl)
+                .map((r) => (
+                  <p key={r.id}>🖼️ {r.id.substring(0, 8)}... has image</p>
+                ))}
+              {requests
+                .filter((r) => r.voiceMessageUrl)
+                .map((r) => (
+                  <p key={r.id}>🎤 {r.id.substring(0, 8)}... has voice</p>
+                ))}
             </div>
           </details>
         </div>
@@ -867,49 +887,51 @@ export default function RequestsSection({
                           </div>
                         )}
 
-                        {/* Media Section - Voice + Photo in a row */}
-                        {(hasVoice || hasImage) && (
+                        {/* ✅ IMAGE SECTION - Enhanced display */}
+                        {hasImage && (
                           <div className="mb-4">
-                            <div className="flex flex-wrap items-center gap-4">
-                              {/* Voice Message */}
-                              {hasVoice && (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <Mic className="w-4 h-4 text-blue-500" />
-                                    <span className="text-xs font-medium text-gray-600">
-                                      {t.voiceMessage}
-                                    </span>
-                                  </div>
-                                  <AudioPlayer
-                                    url={request.voiceMessageUrl!}
-                                    lang={lang}
-                                  />
-                                </div>
-                              )}
-
-                              {/* Photo */}
-                              {hasImage && (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <ImageIcon className="w-4 h-4 text-green-500" />
-                                    <span className="text-xs font-medium text-gray-600">
-                                      {t.photo}
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() =>
-                                      setImageModalUrl(request.imageUrl!)
-                                    }
-                                    className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition cursor-pointer"
-                                  >
-                                    <ImageIcon className="w-4 h-4" />
-                                    <span className="text-sm">
-                                      {t.viewImage}
-                                    </span>
-                                  </button>
-                                </div>
-                              )}
+                            <div className="flex items-center gap-2 mb-2">
+                              <ImageIcon className="w-4 h-4 text-green-500" />
+                              <span className="text-sm font-medium text-gray-700">
+                                {t.photo}
+                              </span>
                             </div>
+                            <button
+                              onClick={() => {
+                                console.log(
+                                  "🖼️ Opening image:",
+                                  request.imageUrl,
+                                );
+                                setImageModalUrl(request.imageUrl!);
+                              }}
+                              className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-green-50 rounded-lg hover:bg-green-100 transition cursor-pointer border border-green-200"
+                            >
+                              <div className="flex items-center gap-2">
+                                <ImageIcon className="w-5 h-5 text-green-600" />
+                                <span className="text-sm font-medium text-green-700">
+                                  {t.imageAttached}
+                                </span>
+                              </div>
+                              <span className="text-xs text-green-600">
+                                {t.tapToView} →
+                              </span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* ✅ VOICE MESSAGE SECTION */}
+                        {hasVoice && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Mic className="w-4 h-4 text-blue-500" />
+                              <span className="text-sm font-medium text-gray-700">
+                                {t.voiceMessage}
+                              </span>
+                            </div>
+                            <AudioPlayer
+                              url={request.voiceMessageUrl!}
+                              lang={lang}
+                            />
                           </div>
                         )}
 
